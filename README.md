@@ -1,6 +1,6 @@
 <div align="center">
 <h1 align="center">fluentb</h1>
-<h3>Dictate and rewrite text in any app, fully on-device</h3>
+<h3>Fluentb: Your Personal Writing Superpower.</h3>
 <a href="https://github.com/dimastatz/fluentb/actions/workflows/ci.yml"><img src="https://github.com/dimastatz/fluentb/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 <img src="https://img.shields.io/badge/status-early%20development-orange" alt="Status">
 <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="Platform">
