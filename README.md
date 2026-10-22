@@ -7,9 +7,7 @@
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 <br>
 <br>
-<kbd>
 <img src="docs/images/fluentb-bird-logo.png" width="256px" alt="fluentb logo">
-</kbd>
 </div>
 
 ## Table of contents
