@@ -12,6 +12,8 @@ fluentb is a system-tray app that makes writing faster and clearer in any applic
 Key constraints from the product description:
 
 - **Local transcription.** Speech-to-text runs on-device with Whisper. Audio must never leave the user's machine; don't add network calls that send audio anywhere.
+- **Local rewrite.** Rewriting runs on-device with a local LLM (llama.cpp, GGUF models). User text must never leave the machine; no cloud rewrite engines.
+- **Models are downloaded on first run**, never bundled. The only allowed network traffic is model downloads and the update check. Specs live in `docs/specs/`.
 - **Written in Rust.**
 - **Lives in the system tray** and should stay out of the way: no main window, minimal UI, low idle resource use.
 - **Platforms:** macOS is supported now. Windows and Linux are planned, so keep OS-specific code (global hotkeys, accessibility/text insertion, tray, microphone access) behind platform abstractions instead of scattering it through the codebase.
