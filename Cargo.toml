@@ -1,0 +1,8 @@
+[package]
+name = "fluentb"
+version = "0.1.0"
+edition = "2021"
+description = "Dictate and rewrite text in any app, with local Whisper transcription."
+license = "MIT"
+
+[dependencies]

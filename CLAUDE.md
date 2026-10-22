@@ -18,12 +18,13 @@ Key constraints from the product description:
 
 ## Repository state
 
-The repo currently holds only the README, LICENSE (MIT), the logo (`fluentb-bird-logo.png`), and a Cargo-oriented `.gitignore`. No source code or `Cargo.toml` exists yet. Update this file with real build, test, and architecture details once the crate is scaffolded.
+The crate is at an early stage. `src/facade.rs` defines the `Facade` trait: the only boundary between the pure state manager and side effects (hotkeys, microphone, Whisper, rewrite engine, text insertion, tray). Each platform provides its own implementation; tests use a fake. Update this file with build, test, and architecture details as more of the crate lands.
 
 ## Conventions
 
 - Standard Cargo workflow: `cargo build`, `cargo test`, `cargo fmt`, `cargo clippy`.
 - Format with `rustfmt` and keep `clippy` clean before committing.
+- CI (`.github/workflows/ci.yml`) runs fmt, clippy with `-D warnings`, and tests under `cargo llvm-cov --fail-under-lines 95`. Every change needs unit tests that keep line coverage at 95% or above; test side-effecting code through a fake `Facade`.
 
 ## Code style: functional
 
