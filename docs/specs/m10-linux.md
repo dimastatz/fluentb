@@ -39,6 +39,7 @@ Implement the `Facade` for Linux desktops. X11 gets full support; Wayland gets t
 9. **Launch at login** — an XDG autostart `.desktop` file.
 10. **Packaging** — AppImage first; Flatpak later (it needs portal-only operation).
 11. **Session detection** — a pure function picks the backend from `XDG_SESSION_TYPE` and `WAYLAND_DISPLAY`.
+12. **Adapter** — all of the above lives in the `platform::linux` adapter, selected by `platform::run()` (see [Platform architecture](README.md#platform-architecture)). The X11 and Wayland backends are strategies inside that adapter, chosen at runtime by session detection. Linux-only crates go under `[target.'cfg(target_os = "linux")'.dependencies]`.
 
 ### Non-functional
 

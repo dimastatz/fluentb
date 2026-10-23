@@ -150,7 +150,7 @@ fluentb has a pure core with side effects at the edges:
 
 - **State manager:** a pure function `next(state, event) -> (state, effects)` that decides what happens.
 - **`Facade` trait** ([`src/facade.rs`](src/facade.rs)): the single boundary to the outside world, covering hotkeys, microphone, Whisper, rewrite engine, text insertion and tray.
-- **Platform implementations:** one `Facade` per OS. Tests use a fake implementation, so the core is fully tested without real hardware.
+- **Platform adapters:** one `Facade` per OS, all under [`src/platform/`](src/platform/). Tests use a fake implementation, so the core is fully tested without real hardware.
 
 ```mermaid
 flowchart TB
@@ -183,6 +183,26 @@ flowchart TB
 ```
 
 `transition::next` is a pure function that decides what happens. `runtime::dispatch` is the only code that calls the `Facade`, and it feeds each result back into `next` as an `Event`. Audio and text never leave the machine: Whisper and the rewrite model both run locally.
+
+### Platform adapters
+
+fluentb is designed for several operating systems from the start. The `Facade` trait is a strategy, and each OS provides an adapter that implements it:
+
+```mermaid
+flowchart TB
+    main["main.rs"] --> run["platform::run()<br/>picks the adapter at compile time"]
+    run --> mac["platform::macos<br/>supported"]
+    run -.-> win["platform::windows<br/>planned (M9)"]
+    run -.-> linux["platform::linux<br/>planned (M10)"]
+    mac & win & linux -- "impl Facade" --> core["Pure core: src/app<br/>sees only &mut dyn Facade"]
+```
+
+- **All platform code in one place.** Everything OS-specific lives under `src/platform/`, one module per OS, together with its OS-only dependencies.
+- **One selection point.** `platform::run()` chooses the adapter for the OS the binary is built for. Nothing outside `src/platform/` checks the target OS.
+- **Thin adapters.** Logic that differs by OS but needs no OS API (key mapping, file paths) is a pure function that takes an `Os` value, so every OS's behaviour is tested on any machine.
+- **Adding an OS** means adding a new adapter. The core and the other adapters don't change.
+
+### States
 
 The core moves through these states:
 

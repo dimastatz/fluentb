@@ -21,6 +21,7 @@ Set up the crate, the side-effect boundary, and CI so every later milestone star
 
 - `Facade` trait with input (`register_hotkeys`, `next_event`), dictation (`start_recording`, `stop_recording`, `transcribe`), rewrite (`selected_text`, `rewrite`), and output (`insert_text`, `set_tray_status`, `notify`) methods.
 - `FakeFacade` in tests that scripts events and records calls.
+- The `Facade` is the strategy interface that every OS adapter implements; see [Platform architecture](README.md#platform-architecture).
 - `.github/workflows/ci.yml`.
 
 ## Acceptance criteria

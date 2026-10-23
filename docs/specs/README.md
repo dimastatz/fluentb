@@ -30,5 +30,16 @@ These apply to every milestone (see `CLAUDE.md`):
 - Audio and user text never leave the machine: transcription (Whisper) and rewrite (local LLM via llama.cpp) both run on-device.
 - Models are never bundled; they are downloaded and verified on first run (M6).
 - All side effects go through the `Facade` trait; the core stays pure.
-- OS-specific code lives behind platform modules (`platform::macos`, `platform::windows`, `platform::linux`).
+- Every design assumes several OS implementations. See [Platform architecture](#platform-architecture).
+
+## Platform architecture
+
+These requirements apply to every milestone that touches the OS:
+
+1. **Strategy.** The `Facade` trait is the only interface between the core and the OS. Every OS-dependent capability is a `Facade` method that uses OS-neutral types. The core takes `&mut dyn Facade` and never knows which OS it runs on.
+2. **Adapters in one place.** Each OS has one adapter module under `src/platform/`: `platform::macos`, `platform::windows` and `platform::linux`. All OS-specific code and OS-only dependencies belong to that adapter.
+3. **One selection point.** `platform::run()` selects the adapter for the OS the binary is built for, at compile time. `main` calls only `platform::run()`. No non-test code outside `src/platform/` uses `#[cfg(target_os)]` or `cfg!` on the OS.
+4. **Pure, shared logic.** OS-dependent decisions that need no OS API (key mapping, file paths, backend selection) are pure functions that take an `Os` value, so they are tested on every CI runner. Adapters stay thin and are tested by hand.
+5. **New features cover every OS.** When a feature adds a `Facade` method, every adapter implements it. An OS that can't support it yet returns a `FacadeError` with a clear message, rather than the core special-casing that OS.
+6. **New OSes don't touch the core.** Adding an OS means adding an adapter and one branch in `platform::run()`; `src/app/`, `src/config/` and the other adapters stay unchanged.
 - No `unwrap`/`expect` outside tests; no shared mutable state unless an OS API forces it.

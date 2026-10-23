@@ -16,7 +16,17 @@ Key constraints from the product description:
 - **Models are downloaded on first run**, never bundled. The only allowed network traffic is model downloads and the update check. Specs live in `docs/specs/`.
 - **Written in Rust.**
 - **Lives in the system tray** and should stay out of the way: no main window, minimal UI, low idle resource use.
-- **Platforms:** macOS is supported now. Windows and Linux are planned, so keep OS-specific code (global hotkeys, accessibility/text insertion, tray, microphone access) behind platform abstractions instead of scattering it through the codebase.
+- **Platforms:** macOS is supported now; Windows and Linux are planned. Every design must assume several OS implementations exist (see [Platform design](#platform-design)).
+
+## Platform design
+
+fluentb uses the **strategy pattern**, with each OS as an **adapter**:
+
+- **One interface.** The `Facade` trait (`src/facade.rs`) is the strategy: everything OS-dependent (global hotkeys, microphone, Whisper/LLM acceleration, selection reading, text insertion, tray, notifications, permissions, launch at login) is a method on it, expressed in OS-neutral domain types. The core (`src/app/`) only ever sees `&mut dyn Facade`.
+- **One place.** All platform-dependent code lives under `src/platform/`, one adapter per OS: `platform::macos` today, `platform::windows` and `platform::linux` later. Each adapter translates the `Facade` calls to its OS APIs and owns its OS-only dependencies (`[target.'cfg(...)'.dependencies]` in `Cargo.toml`).
+- **One selection point.** `platform::run()` picks the adapter for the OS the binary is built for, at compile time, and `main` just calls it. No code outside `src/platform/` uses `#[cfg(target_os)]`, `cfg!(windows)` or similar (tests excepted); OS differences in pure logic take an `Os` parameter instead.
+- **Shared, pure helpers.** Logic that adapters have in common, or that differs by OS but needs no OS API (key mapping, paths, AppleScript quoting, session detection), is a pure function in a cross-platform module, tested on every OS. Adapters stay thin glue.
+- **Adding an OS** means adding `src/platform/<os>/` with a `Facade` implementation and a `run`, plus a branch in `platform::run()`. The core, config and other adapters don't change. If a feature can't fit the `Facade`, extend the trait for every OS (an OS without support returns a `FacadeError` explaining why) rather than special-casing one.
 
 ## Repository state
 
@@ -26,8 +36,8 @@ The crate is at an early stage (M1–M3 done; see `docs/specs/`). Update this fi
 - `src/app/` — the pure core. `transition::next(state, event) -> (State, Vec<Effect>)` decides everything and returns effects as data; `runtime` is the only code that calls the facade, feeding each effect's result back as an `Event`. Tray updates and notifications are best effort, so a failure to report never triggers another report.
 - `src/config/` — settings. `parse(text, os)` is pure and never fails: invalid or missing values fall back to their defaults and produce `ConfigWarning`s. `load` is the only file I/O (it creates a commented default file on first run). `run_app` takes the `Config` and shows all warnings in one notification at startup.
 - `src/accelerator.rs` — validated hotkeys (`Accelerator`); `Cmd` means Command on macOS and Ctrl elsewhere.
-- `src/platform/` — `Os`, plus pure helpers shared by platforms (`keymap`: `Accelerator` → `global-hotkey`; `applescript`). Pure code takes an `Os` parameter instead of using `cfg!`, so every OS's behaviour is testable on any machine.
-- `src/platform/macos/` — the macOS `Facade` and entry point (`run`). The main thread runs the `tao` event loop (macOS requires hotkeys there); the state manager runs on a worker thread and asks the main thread to register hotkeys via `MainRequest`. This directory is thin OS glue, excluded from coverage and tested by hand: keep logic out of it and in pure modules (`audio`, `transcript`, `models`, `platform::keymap`).
+- `src/platform/` — all platform-dependent code: `run()` (the single place that picks the OS adapter), `Os`, and pure helpers shared by platforms (`keymap`: `Accelerator` → `global-hotkey`; `applescript`). Pure code takes an `Os` parameter instead of using `cfg!`, so every OS's behaviour is testable on any machine.
+- `src/platform/macos/` — the macOS adapter: its `Facade` and entry point (`run`). The main thread runs the `tao` event loop (macOS requires hotkeys there); the state manager runs on a worker thread and asks the main thread to register hotkeys via `MainRequest`. This directory is thin OS glue, excluded from coverage and tested by hand: keep logic out of it and in pure modules (`audio`, `transcript`, `models`, `platform::keymap`).
 - `src/audio.rs`, `src/transcript.rs`, `src/models.rs` — pure helpers: resampling to 16 kHz mono, cleaning Whisper output, model file paths and language selection.
 - Building needs CMake and the Xcode Command Line Tools (whisper.cpp). `cargo test -- --ignored` runs a real transcription and needs `ggml-base.en.bin` in `~/Library/Application Support/fluentb/models/`.
 - `src/testing.rs` — `FakeFacade` (test-only): scripted input events, recorded side effects, and per-call failure injection via `Call`.
