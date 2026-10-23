@@ -124,7 +124,7 @@ fluentb has a pure core with side effects at the edges:
 Each milestone has a PRD in [`docs/specs/`](docs/specs/README.md).
 
 - [x] M0: Foundation (`Facade` trait, CI with coverage gate)
-- [ ] M1: Pure state manager
+- [x] M1: Pure state manager
 - [ ] M2: Configuration
 - [ ] M3: macOS dictation end to end
 - [ ] M4: Tray app shell

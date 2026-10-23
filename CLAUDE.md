@@ -20,7 +20,11 @@ Key constraints from the product description:
 
 ## Repository state
 
-The crate is at an early stage. `src/facade.rs` defines the `Facade` trait: the only boundary between the pure state manager and side effects (hotkeys, microphone, Whisper, rewrite engine, text insertion, tray). Each platform provides its own implementation; tests use a fake. Update this file with build, test, and architecture details as more of the crate lands.
+The crate is at an early stage (M1 done; see `docs/specs/`). Update this file with build, test, and architecture details as more of the crate lands.
+
+- `src/facade.rs` — the `Facade` trait: the only boundary between the pure core and side effects (hotkeys, microphone, Whisper, rewrite engine, text insertion, tray). Each platform provides its own implementation.
+- `src/app/` — the pure core. `transition::next(state, event) -> (State, Vec<Effect>)` decides everything and returns effects as data; `runtime` is the only code that calls the facade, feeding each effect's result back as an `Event`. Tray updates and notifications are best effort, so a failure to report never triggers another report.
+- `src/testing.rs` — `FakeFacade` (test-only): scripted input events, recorded side effects, and per-call failure injection via `Call`.
 
 ## Conventions
 
