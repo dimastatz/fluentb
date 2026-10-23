@@ -1,5 +1,7 @@
 # M1 — Pure state manager
 
+**Status:** Done
+
 ## Summary
 
 Build the platform-agnostic core that decides what fluentb does in response to each event. The core is a pure transition function plus a thin interpreter that runs its effects through a `Facade`. After M1, the full dictate and rewrite flows run end to end against the fake facade.
@@ -78,6 +80,15 @@ Build the platform-agnostic core that decides what fluentb does in response to e
 - [ ] Dictate and rewrite flows pass end to end against `FakeFacade`.
 - [ ] Every `FacadeError` variant produces a notification and a return to `Idle`.
 - [ ] Coverage ≥ 95%; clippy clean.
+
+## Implementation notes
+
+Decisions made while building M1:
+
+- `Effect::DiscardRecording` stops the microphone and ignores the result. It's used on quit and on a failure while recording, so releasing the mic can't cause a second error report.
+- `SetTray` and `Notify` are best effort: their errors are dropped. This guarantees that handling a failure always terminates.
+- A blank selection is treated like no selection, and a blank rewrite result is never inserted. The user is notified and their text is left unchanged.
+- The module is `src/app/` rather than `src/core/`, to avoid clashing with Rust's built-in `core` crate.
 
 ## Open questions
 

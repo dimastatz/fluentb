@@ -6,8 +6,8 @@ One PRD per milestone. Each milestone ends in something demoable and keeps CI gr
 | #   | Milestone                                              | Status  | Depends on |
 | --- | ------------------------------------------------------ | ------- | ---------- |
 | M0  | [Foundation](m00-foundation.md)                        | Done    | —          |
-| M1  | [Pure state manager](m01-state-manager.md)             | Next    | M0         |
-| M2  | [Configuration](m02-configuration.md)                  | Planned | M0         |
+| M1  | [Pure state manager](m01-state-manager.md)             | Done    | M0         |
+| M2  | [Configuration](m02-configuration.md)                  | Next    | M0         |
 | M3  | [macOS dictation end to end](m03-macos-dictation.md)   | Planned | M1, M2     |
 | M4  | [Tray app shell](m04-tray-shell.md)                    | Planned | M3         |
 | M5  | [Rewrite](m05-rewrite.md)                              | Planned | M3, M4     |
