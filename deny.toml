@@ -1,0 +1,34 @@
+# cargo-deny: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+all-features = true
+
+[advisories]
+# Fail on known vulnerabilities and on unmaintained or yanked crates.
+unmaintained = "all"
+yanked = "deny"
+
+[licenses]
+# Permissive licenses compatible with shipping fluentb under MIT.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+# The allow list covers expected future dependencies, not just current ones.
+unused-allowed-license = "allow"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+# Only crates.io; git or other registries must be added here deliberately.
+unknown-registry = "deny"
+unknown-git = "deny"

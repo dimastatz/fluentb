@@ -30,7 +30,9 @@ The crate is at an early stage (M1 done; see `docs/specs/`). Update this file wi
 
 - Standard Cargo workflow: `cargo build`, `cargo test`, `cargo fmt`, `cargo clippy`.
 - Format with `rustfmt` and keep `clippy` clean before committing.
-- CI (`.github/workflows/ci.yml`) runs fmt, clippy with `-D warnings`, and tests under `cargo llvm-cov --fail-under-lines 95`. Every change needs unit tests that keep line coverage at 95% or above; test side-effecting code through a fake `Facade`.
+- CI (`.github/workflows/ci.yml`) runs fmt, clippy with `-D warnings`, rustdoc with `-D warnings`, tests under `cargo llvm-cov --fail-under-lines 95`, an MSRV build (1.85, `rust-version` in `Cargo.toml`), `cargo deny check` (`deny.toml`), and `cargo machete`. Every change needs unit tests that keep line coverage at 95% or above; test side-effecting code through a fake `Facade`.
+- Lints are configured in `Cargo.toml`: clippy `pedantic` plus `unwrap_used`, `expect_used`, and `panic` (allowed in tests via `clippy.toml`), and `unsafe_code = "deny"`. Platform modules that need FFI opt in with `#![allow(unsafe_code)]`; don't add `allow`s elsewhere without a reason in a comment.
+- CI pins third-party actions to full commit SHAs; Dependabot updates them weekly.
 
 ## Code style: functional
 
