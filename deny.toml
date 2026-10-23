@@ -7,6 +7,11 @@ all-features = true
 # Fail on known vulnerabilities and on unmaintained or yanked crates.
 unmaintained = "all"
 yanked = "deny"
+ignore = [
+    # Only reached through tao's Linux GTK backend, which macOS builds never compile.
+    # Revisit when Linux support lands (M10).
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via tao's Linux-only GTK deps" },
+]
 
 [licenses]
 # Permissive licenses compatible with shipping fluentb under MIT.
@@ -19,6 +24,9 @@ allow = [
     "ISC",
     "Zlib",
     "Unicode-3.0",
+    # Permissive: whisper-rs (Unlicense), arboard's Windows clipboard deps (BSL-1.0).
+    "Unlicense",
+    "BSL-1.0",
 ]
 confidence-threshold = 0.9
 # The allow list covers expected future dependencies, not just current ones.

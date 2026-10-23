@@ -48,11 +48,11 @@ Everything runs on your machine:
 
 ## Project status
 
-fluentb is in **early development** and is not usable yet. The core interfaces and CI are in place. The state manager and macOS integration are next.
+fluentb is in **early development**. On macOS, dictation works from the terminal: press the Dictate hotkey, speak, press it again, and the text is typed into the focused app. The tray icon (M4) and Rewrite (M5) are next.
 
 | Platform | Status    |
 | -------- | --------- |
-| macOS    | In progress |
+| macOS    | Dictation works (terminal app) |
 | Windows  | Planned   |
 | Linux    | Planned   |
 
@@ -60,8 +60,9 @@ fluentb is in **early development** and is not usable yet. The core interfaces a
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) 1.85 or later
-- macOS 13 or later (for running the app once the macOS integration lands)
+- [Rust](https://rustup.rs/) 1.88 or later
+- macOS 13 or later
+- [CMake](https://cmake.org/) and the Xcode Command Line Tools, to build whisper.cpp (`brew install cmake`, `xcode-select --install`)
 
 ### Build from source
 
@@ -71,6 +72,22 @@ cd fluentb
 cargo build --release
 ```
 
+### Try dictation
+
+1. Download the speech model (about 142 MB). Until M6 adds automatic downloads, it goes here:
+
+   ```sh
+   mkdir -p ~/Library/Application\ Support/fluentb/models
+   curl -L -o ~/Library/Application\ Support/fluentb/models/ggml-base.en.bin \
+     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+   ```
+
+2. Run fluentb from a terminal: `cargo run --release`.
+3. Allow your terminal app **Microphone** and **Accessibility** access in System Settings → Privacy & Security when macOS asks. Accessibility is needed to type into other apps.
+4. Click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
+
+Quit with `Ctrl+C` in the terminal.
+
 ### Run the checks
 
 These are the checks CI runs on every pull request:
@@ -79,12 +96,15 @@ These are the checks CI runs on every pull request:
 cargo fmt --all --check
 cargo clippy --locked --all-targets -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
-cargo llvm-cov --locked --all-targets --fail-under-lines 95   # cargo install cargo-llvm-cov
+cargo llvm-cov --locked --all-targets --ignore-filename-regex 'src/main\.rs|src/platform/macos/' --fail-under-lines 95
 cargo deny check                                              # cargo install cargo-deny
 cargo machete                                                 # cargo install cargo-machete
+cargo test -- --ignored   # real Whisper transcription; needs the model downloaded
 ```
 
-CI also checks that the crate builds with the minimum supported Rust version (1.85).
+The tools come from `cargo install cargo-llvm-cov cargo-deny cargo-machete`. Coverage excludes the macOS glue (`src/main.rs`, `src/platform/macos/`), which is tested by hand.
+
+CI also checks that the crate builds with the minimum supported Rust version (1.88).
 
 ## Usage
 
