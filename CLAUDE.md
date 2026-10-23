@@ -30,14 +30,15 @@ fluentb uses the **strategy pattern**, with each OS as an **adapter**:
 
 ## Repository state
 
-The crate is at an early stage (M1–M3 done; see `docs/specs/`). Update this file with build, test, and architecture details as more of the crate lands.
+The crate is at an early stage (M1–M4 implemented; see `docs/specs/` for status). Update this file with build, test, and architecture details as more of the crate lands.
 
 - `src/facade.rs` — the `Facade` trait: the only boundary between the pure core and side effects (hotkeys, microphone, Whisper, rewrite engine, text insertion, tray). Each platform provides its own implementation.
 - `src/app/` — the pure core. `transition::next(state, event) -> (State, Vec<Effect>)` decides everything and returns effects as data; `runtime` is the only code that calls the facade, feeding each effect's result back as an `Event`. Tray updates and notifications are best effort, so a failure to report never triggers another report.
 - `src/config/` — settings. `parse(text, os)` is pure and never fails: invalid or missing values fall back to their defaults and produce `ConfigWarning`s. `load` is the only file I/O (it creates a commented default file on first run). `run_app` takes the `Config` and shows all warnings in one notification at startup.
 - `src/accelerator.rs` — validated hotkeys (`Accelerator`); `Cmd` means Command on macOS and Ctrl elsewhere.
-- `src/platform/` — all platform-dependent code: `run()` (the single place that picks the OS adapter), `Os`, and pure helpers shared by platforms (`keymap`: `Accelerator` → `global-hotkey`; `applescript`). Pure code takes an `Os` parameter instead of using `cfg!`, so every OS's behaviour is testable on any machine.
-- `src/platform/macos/` — the macOS adapter: its `Facade` and entry point (`run`). The main thread runs the `tao` event loop (macOS requires hotkeys there); the state manager runs on a worker thread and asks the main thread to register hotkeys via `MainRequest`. This directory is thin OS glue, excluded from coverage and tested by hand: keep logic out of it and in pure modules (`audio`, `transcript`, `models`, `platform::keymap`).
+- `src/platform/` — all platform-dependent code: `run()` (the single place that picks the OS adapter), `Os`, and helpers shared by platforms: `keymap` (`Accelerator` → `global-hotkey`), `applescript`, `bridge` (routes raw hotkey and menu `Signal`s from one channel to `InputEvent`s), and `instance` (the single-instance file lock). Pure code takes an `Os` parameter instead of using `cfg!`, so every OS's behaviour is testable on any machine.
+- `src/platform/macos/` — the macOS adapter: its `Facade` and entry point (`run`). The main thread runs the `tao` event loop and owns the menu-bar icon (macOS requires hotkeys and the tray there); the state manager runs on a worker thread, reads hotkey and menu events through the bridge channel, and sends `MainRequest`s to register hotkeys and update the icon. This directory is thin OS glue, excluded from coverage and tested by hand: keep logic out of it and in pure modules (`audio`, `transcript`, `models`, `platform::keymap`).
+- `src/tray/` — the tray as data: `menu::menu_model` builds the menu from the config and status, and `icon::icon` draws each status icon in code (no image files).
 - `src/audio.rs`, `src/transcript.rs`, `src/models.rs` — pure helpers: resampling to 16 kHz mono, cleaning Whisper output, model file paths and language selection.
 - Building needs CMake and the Xcode Command Line Tools (whisper.cpp). `cargo test -- --ignored` runs a real transcription and needs `ggml-base.en.bin` in `~/Library/Application Support/fluentb/models/`.
 - `src/testing.rs` — `FakeFacade` (test-only): scripted input events, recorded side effects, and per-call failure injection via `Call`.
@@ -46,7 +47,7 @@ The crate is at an early stage (M1–M3 done; see `docs/specs/`). Update this fi
 
 - Standard Cargo workflow: `cargo build`, `cargo test`, `cargo fmt`, `cargo clippy`.
 - Format with `rustfmt` and keep `clippy` clean before committing.
-- CI (`.github/workflows/ci.yml`) runs fmt, clippy with `-D warnings`, rustdoc with `-D warnings`, tests under `cargo llvm-cov --fail-under-lines 95` (excluding OS glue in `src/main.rs` and `src/platform/macos/`), an MSRV build (1.88, `rust-version` in `Cargo.toml`), `cargo deny check` (`deny.toml`), and `cargo machete`. Every change needs unit tests that keep line coverage at 95% or above; test side-effecting code through a fake `Facade`.
+- CI (`.github/workflows/ci.yml`) runs fmt, clippy with `-D warnings`, rustdoc with `-D warnings`, tests under `cargo llvm-cov --fail-under-lines 95` (excluding OS glue in `src/main.rs` and `src/platform/macos/`), an MSRV build (1.90, `rust-version` in `Cargo.toml`), `cargo deny check` (`deny.toml`), and `cargo machete`. Every change needs unit tests that keep line coverage at 95% or above; test side-effecting code through a fake `Facade`.
 - Lints are configured in `Cargo.toml`: clippy `pedantic` plus `unwrap_used`, `expect_used`, and `panic` (allowed in tests via `clippy.toml`), and `unsafe_code = "deny"`. Platform modules that need FFI opt in with `#![allow(unsafe_code)]`; don't add `allow`s elsewhere without a reason in a comment.
 - CI pins third-party actions to full commit SHAs; Dependabot updates them weekly.
 

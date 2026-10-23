@@ -7,8 +7,10 @@ use crate::config::Config;
 use crate::facade::{
     Audio, Facade, FacadeError, Hotkey, HotkeyBinding, InputEvent, Result, TrayStatus,
 };
+use crate::platform::bridge::{self, Route, Signal};
 use crate::platform::keymap;
-use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::mpsc;
 use tao::event_loop::EventLoopProxy;
 
@@ -16,6 +18,9 @@ const REWRITE_UNAVAILABLE: &str = "isn't available yet; it arrives in a later ve
 
 pub struct MacFacade {
     proxy: EventLoopProxy<MainRequest>,
+    /// Hotkey and menu events from the main thread.
+    signals: mpsc::Receiver<Signal>,
+    config_path: Option<PathBuf>,
     /// Registered hotkey ids and what they trigger.
     hotkeys: Vec<(u32, Hotkey)>,
     recording: Option<Recording>,
@@ -23,9 +28,16 @@ pub struct MacFacade {
 }
 
 impl MacFacade {
-    pub fn new(config: &Config, proxy: EventLoopProxy<MainRequest>) -> Self {
+    pub fn new(
+        config: &Config,
+        config_path: Option<PathBuf>,
+        signals: mpsc::Receiver<Signal>,
+        proxy: EventLoopProxy<MainRequest>,
+    ) -> Self {
         Self {
             proxy,
+            signals,
+            config_path,
             hotkeys: Vec::new(),
             recording: None,
             transcriber: Transcriber::new(&config.dictation),
@@ -69,16 +81,15 @@ impl Facade for MacFacade {
     }
 
     fn next_event(&mut self) -> Result<InputEvent> {
-        GlobalHotKeyEvent::receiver()
-            .iter()
-            .filter(|event| event.state() == HotKeyState::Pressed)
-            .find_map(|event| {
-                self.hotkeys
-                    .iter()
-                    .find(|(id, _)| *id == event.id())
-                    .map(|(_, hotkey)| InputEvent::HotkeyPressed(*hotkey))
+        std::iter::from_fn(|| bridge::next_route(&self.signals, &self.hotkeys))
+            .find_map(|route| match route {
+                Route::Input(event) => Some(event),
+                Route::OpenConfig => {
+                    open_config(self.config_path.as_deref());
+                    None
+                }
             })
-            .ok_or_else(|| FacadeError::Hotkeys("the hotkey listener stopped".into()))
+            .ok_or_else(|| FacadeError::Hotkeys("the event listener stopped".into()))
     }
 
     fn start_recording(&mut self) -> Result<()> {
@@ -116,13 +127,35 @@ impl Facade for MacFacade {
     }
 
     fn set_tray_status(&mut self, status: TrayStatus) -> Result<()> {
-        // The tray icon arrives in M4; until then, report state in the terminal.
-        eprintln!("fluentb: {status:?}");
-        Ok(())
+        self.proxy
+            .send_event(MainRequest::SetStatus(status))
+            .map_err(|_| FacadeError::Tray("the event loop has stopped".into()))
     }
 
     fn notify(&mut self, message: &str) -> Result<()> {
         notify::show(message);
         Ok(())
+    }
+}
+
+/// Opens the config file in the default text editor, reporting failures.
+fn open_config(path: Option<&Path>) {
+    let result = path
+        .ok_or_else(|| "couldn't find the config file (is HOME set?)".to_owned())
+        .and_then(|path| {
+            Command::new("open")
+                .arg("-t")
+                .arg(path)
+                .status()
+                .map_err(|error| error.to_string())
+        })
+        .and_then(|status| {
+            status
+                .success()
+                .then_some(())
+                .ok_or_else(|| format!("`open` failed with {status}"))
+        });
+    if let Err(reason) = result {
+        notify::show(&format!("Couldn't open the config: {reason}"));
     }
 }
