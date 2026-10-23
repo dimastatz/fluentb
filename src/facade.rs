@@ -7,6 +7,7 @@
 //!
 //! Each platform (macOS now, Windows and Linux later) provides its own implementation.
 
+use crate::accelerator::Accelerator;
 use std::fmt;
 
 /// The global hotkeys fluentb listens for.
@@ -18,11 +19,11 @@ pub enum Hotkey {
     Rewrite,
 }
 
-/// A key combination bound to a [`Hotkey`], e.g. `"Cmd+Shift+D"`.
+/// A key combination bound to a [`Hotkey`], e.g. `Cmd+Shift+D`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HotkeyBinding {
     pub hotkey: Hotkey,
-    pub accelerator: String,
+    pub accelerator: Accelerator,
 }
 
 /// Events the outside world delivers to the state manager.

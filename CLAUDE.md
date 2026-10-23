@@ -20,10 +20,13 @@ Key constraints from the product description:
 
 ## Repository state
 
-The crate is at an early stage (M1 done; see `docs/specs/`). Update this file with build, test, and architecture details as more of the crate lands.
+The crate is at an early stage (M1 and M2 done; see `docs/specs/`). Update this file with build, test, and architecture details as more of the crate lands.
 
 - `src/facade.rs` — the `Facade` trait: the only boundary between the pure core and side effects (hotkeys, microphone, Whisper, rewrite engine, text insertion, tray). Each platform provides its own implementation.
 - `src/app/` — the pure core. `transition::next(state, event) -> (State, Vec<Effect>)` decides everything and returns effects as data; `runtime` is the only code that calls the facade, feeding each effect's result back as an `Event`. Tray updates and notifications are best effort, so a failure to report never triggers another report.
+- `src/config/` — settings. `parse(text, os)` is pure and never fails: invalid or missing values fall back to their defaults and produce `ConfigWarning`s. `load` is the only file I/O (it creates a commented default file on first run). `run_app` takes the `Config` and shows all warnings in one notification at startup.
+- `src/accelerator.rs` — validated hotkeys (`Accelerator`); `Cmd` means Command on macOS and Ctrl elsewhere.
+- `src/platform/` — `Os`. Pure code takes an `Os` parameter instead of using `cfg!`, so every OS's behaviour is testable on any machine. Platform `Facade` implementations will live here.
 - `src/testing.rs` — `FakeFacade` (test-only): scripted input events, recorded side effects, and per-call failure injection via `Call`.
 
 ## Conventions

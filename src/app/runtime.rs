@@ -6,7 +6,8 @@
 use super::effect::Effect;
 use super::state::{Event, State};
 use super::transition::next;
-use crate::facade::{Facade, Hotkey, HotkeyBinding, Result};
+use crate::config::{Config, ConfigWarning};
+use crate::facade::{Facade, Result};
 
 /// What running one effect led to.
 enum Outcome {
@@ -15,27 +16,16 @@ enum Outcome {
     Exit,
 }
 
-/// The hotkeys used until configuration lands (M2).
-#[must_use]
-pub fn default_bindings() -> Vec<HotkeyBinding> {
-    vec![
-        HotkeyBinding {
-            hotkey: Hotkey::Dictate,
-            accelerator: "Cmd+Shift+D".into(),
-        },
-        HotkeyBinding {
-            hotkey: Hotkey::Rewrite,
-            accelerator: "Cmd+Shift+R".into(),
-        },
-    ]
-}
-
-/// Registers the hotkeys and processes input until the user quits.
+/// Registers the configured hotkeys, reports any config problems, and processes input
+/// until the user quits.
 ///
 /// Returns an error only if the hotkeys can't be registered or input can't be read;
 /// every other failure is reported to the user and the app keeps running.
-pub fn run_app(facade: &mut dyn Facade, bindings: &[HotkeyBinding]) -> Result<()> {
-    facade.register_hotkeys(bindings)?;
+pub fn run_app(facade: &mut dyn Facade, config: &Config, warnings: &[ConfigWarning]) -> Result<()> {
+    facade.register_hotkeys(&config.bindings())?;
+    if !warnings.is_empty() {
+        perform(Effect::Notify(config_notice(warnings)), facade);
+    }
     let mut state = Some(State::Idle);
     while let Some(current) = state {
         let event = Event::Input(facade.next_event()?);
@@ -59,6 +49,14 @@ pub fn dispatch(state: State, event: Event, facade: &mut dyn Facade) -> Option<S
         .into_iter()
         .flatten()
         .try_fold(state, |state, event| dispatch(state, event, facade))
+}
+
+/// One notification for all config problems, so startup shows a single message.
+fn config_notice(warnings: &[ConfigWarning]) -> String {
+    std::iter::once("fluentb settings:".to_owned())
+        .chain(warnings.iter().map(ToString::to_string))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Carries out one effect. Status updates (tray, notifications) are best effort so a
@@ -108,15 +106,20 @@ fn perform(effect: Effect, facade: &mut dyn Facade) -> Outcome {
 mod tests {
     use super::*;
     use crate::app::transition::{EMPTY_REWRITE, NO_SELECTION};
-    use crate::facade::{FacadeError, InputEvent, TrayStatus};
+    use crate::facade::{FacadeError, Hotkey, InputEvent, TrayStatus};
+    use crate::platform::Os;
     use crate::testing::{Call, FakeFacade};
 
     const DICTATE: InputEvent = InputEvent::HotkeyPressed(Hotkey::Dictate);
     const REWRITE: InputEvent = InputEvent::HotkeyPressed(Hotkey::Rewrite);
     const QUIT: InputEvent = InputEvent::QuitRequested;
 
+    fn config() -> Config {
+        Config::defaults(Os::MacOs)
+    }
+
     fn run(facade: &mut FakeFacade) {
-        assert_eq!(run_app(facade, &default_bindings()), Ok(()));
+        assert_eq!(run_app(facade, &config(), &[]), Ok(()));
     }
 
     #[test]
@@ -125,7 +128,7 @@ mod tests {
 
         run(&mut facade);
 
-        assert_eq!(facade.bindings, default_bindings());
+        assert_eq!(facade.bindings, config().bindings());
         assert_eq!(facade.inserted, ["hello world"]);
         assert_eq!(
             facade.tray,
@@ -263,7 +266,7 @@ mod tests {
         };
 
         assert_eq!(
-            run_app(&mut facade, &default_bindings()),
+            run_app(&mut facade, &config(), &[]),
             Err(Call::RegisterHotkeys.error())
         );
     }
@@ -273,8 +276,38 @@ mod tests {
         let mut facade = FakeFacade::with_events([DICTATE]);
 
         assert_eq!(
-            run_app(&mut facade, &default_bindings()),
+            run_app(&mut facade, &config(), &[]),
             Err(FacadeError::Hotkeys("no more events".into()))
         );
+    }
+
+    #[test]
+    fn config_warnings_are_shown_once_at_startup() {
+        let mut facade = FakeFacade::with_events([QUIT]);
+        let warnings = [
+            ConfigWarning::UnknownKey("theme".into()),
+            ConfigWarning::HotkeyConflict,
+        ];
+
+        assert_eq!(run_app(&mut facade, &config(), &warnings), Ok(()));
+
+        assert_eq!(
+            facade.notifications,
+            [format!(
+                "fluentb settings:\n{}\n{}",
+                warnings[0], warnings[1]
+            )]
+        );
+    }
+
+    #[test]
+    fn registers_the_configured_hotkeys() {
+        let (config, _) = crate::config::parse("[hotkeys]\ndictate = \"Alt+Space\"\n", Os::Linux);
+        let mut facade = FakeFacade::with_events([QUIT]);
+
+        assert_eq!(run_app(&mut facade, &config, &[]), Ok(()));
+
+        assert_eq!(facade.bindings, config.bindings());
+        assert!(facade.notifications.is_empty());
     }
 }

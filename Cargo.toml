@@ -7,6 +7,7 @@ description = "Dictate and rewrite text in any app, with local Whisper transcrip
 license = "MIT"
 
 [dependencies]
+toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "serde"] }
 
 [lints.rust]
 # Deny, not forbid, so platform modules can opt in with `#![allow(unsafe_code)]`.
@@ -24,3 +25,6 @@ needless_for_each = "allow"
 missing_errors_doc = "allow"
 # The suggested `assert_eq!(v, [] as [T; 0])` reads worse than `assert!(v.is_empty())`.
 assert_is_empty = "allow"
+
+[dev-dependencies]
+tempfile = "3.27.0"
