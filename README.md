@@ -48,11 +48,11 @@ Everything runs on your machine:
 
 ## Project status
 
-fluentb is in **early development**. On macOS, dictation works from the terminal: press the Dictate hotkey, speak, press it again, and the text is typed into the focused app. The tray icon (M4) and Rewrite (M5) are next.
+fluentb is in **early development**. On macOS, fluentb runs in the menu bar and dictation works: press the Dictate hotkey, speak, press it again, and the text is typed into the focused app. Rewrite (M5) and automatic model downloads (M6) are next.
 
 | Platform | Status    |
 | -------- | --------- |
-| macOS    | Dictation works (terminal app) |
+| macOS    | Dictation works (menu-bar app, built from source) |
 | Windows  | Planned   |
 | Linux    | Planned   |
 
@@ -60,7 +60,7 @@ fluentb is in **early development**. On macOS, dictation works from the terminal
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) 1.88 or later
+- [Rust](https://rustup.rs/) 1.90 or later
 - macOS 13 or later
 - [CMake](https://cmake.org/) and the Xcode Command Line Tools, to build whisper.cpp (`brew install cmake`, `xcode-select --install`)
 
@@ -86,7 +86,7 @@ cargo build --release
 3. Allow your terminal app **Microphone** and **Accessibility** access in System Settings → Privacy & Security when macOS asks. Accessibility is needed to type into other apps.
 4. Click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
 
-Quit with `Ctrl+C` in the terminal.
+fluentb shows a microphone in the menu bar: an outline when idle, red while recording, and three dots while transcribing. Its menu lists your hotkeys, opens the config, and quits the app. Only one copy runs at a time.
 
 ### Run the checks
 
@@ -104,7 +104,7 @@ cargo test -- --ignored   # real Whisper transcription; needs the model download
 
 The tools come from `cargo install cargo-llvm-cov cargo-deny cargo-machete`. Coverage excludes the macOS glue (`src/main.rs`, `src/platform/macos/`), which is tested by hand.
 
-CI also checks that the crate builds with the minimum supported Rust version (1.88).
+CI also checks that the crate builds with the minimum supported Rust version (1.90).
 
 ## Usage
 

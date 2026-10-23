@@ -2,7 +2,7 @@
 name = "fluentb"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.90"
 description = "Dictate and rewrite text in any app, with local Whisper transcription."
 license = "MIT"
 
@@ -37,4 +37,5 @@ core-graphics = "0.25"
 cpal = "0.18"
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat"] }
 tao = "0.37"
+tray-icon = "0.26"
 whisper-rs = { version = "0.16", features = ["metal"] }

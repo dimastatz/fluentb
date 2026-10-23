@@ -6,6 +6,7 @@ pub mod facade;
 pub mod models;
 pub mod platform;
 pub mod transcript;
+pub mod tray;
 
 #[cfg(test)]
 pub(crate) mod testing;

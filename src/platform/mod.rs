@@ -11,6 +11,8 @@
 use std::process::ExitCode;
 
 pub mod applescript;
+pub mod bridge;
+pub mod instance;
 pub mod keymap;
 #[cfg(target_os = "macos")]
 pub mod macos;

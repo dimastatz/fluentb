@@ -63,6 +63,64 @@ impl Accelerator {
     pub fn key(&self) -> Key {
         self.key
     }
+
+    /// How menus show the hotkey on `os`: `⇧⌘D` on macOS (Apple's modifier order,
+    /// which is also the canonical order), `Ctrl+Shift+D` elsewhere.
+    #[must_use]
+    pub fn display(&self, os: Os) -> String {
+        let modifiers = self
+            .modifiers
+            .iter()
+            .map(|modifier| modifier_name(*modifier, os));
+        let key = key_name(self.key, os);
+        match os {
+            Os::MacOs => modifiers.chain([key]).collect(),
+            Os::Windows | Os::Linux => modifiers.chain([key]).collect::<Vec<_>>().join("+"),
+        }
+    }
+}
+
+fn modifier_name(modifier: Modifier, os: Os) -> String {
+    let name = match (modifier, os) {
+        (Modifier::Ctrl, Os::MacOs) => "⌃",
+        (Modifier::Alt, Os::MacOs) => "⌥",
+        (Modifier::Shift, Os::MacOs) => "⇧",
+        (Modifier::Meta, Os::MacOs) => "⌘",
+        (Modifier::Ctrl, _) => "Ctrl",
+        (Modifier::Alt, _) => "Alt",
+        (Modifier::Shift, _) => "Shift",
+        (Modifier::Meta, Os::Windows) => "Win",
+        (Modifier::Meta, Os::Linux) => "Super",
+    };
+    name.to_owned()
+}
+
+fn key_name(key: Key, os: Os) -> String {
+    let mac = os == Os::MacOs;
+    let name = match key {
+        Key::Char(c) => return c.to_string(),
+        Key::Function(n) => return format!("F{n}"),
+        Key::Space => "Space",
+        Key::Tab if mac => "⇥",
+        Key::Tab => "Tab",
+        Key::Enter if mac => "↩",
+        Key::Enter => "Enter",
+        Key::Escape if mac => "⎋",
+        Key::Escape => "Esc",
+        Key::Backspace if mac => "⌫",
+        Key::Backspace => "Backspace",
+        Key::Delete if mac => "⌦",
+        Key::Delete => "Delete",
+        Key::Up => "↑",
+        Key::Down => "↓",
+        Key::Left => "←",
+        Key::Right => "→",
+        Key::Home => "Home",
+        Key::End => "End",
+        Key::PageUp => "PageUp",
+        Key::PageDown => "PageDown",
+    };
+    name.to_owned()
 }
 
 /// Why a hotkey string was rejected.
@@ -187,6 +245,86 @@ mod tests {
 
     fn accel(modifiers: &[Modifier], key: Key) -> Accelerator {
         Accelerator::new(modifiers.iter().copied(), key)
+    }
+
+    #[test]
+    fn displays_hotkeys_per_os() {
+        let cases = [
+            ("Cmd+Shift+D", Os::MacOs, "⇧⌘D"),
+            ("Ctrl+Alt+Shift+Cmd+R", Os::MacOs, "⌃⌥⇧⌘R"),
+            ("Cmd+Shift+D", Os::Windows, "Ctrl+Shift+D"),
+            ("Win+Alt+F5", Os::Windows, "Alt+Win+F5"),
+            ("Super+Space", Os::Linux, "Super+Space"),
+        ];
+
+        cases.iter().for_each(|(text, os, expected)| {
+            assert_eq!(parse(text, *os).unwrap().display(*os), *expected, "{text}");
+        });
+    }
+
+    #[test]
+    fn displays_every_named_key() {
+        let names = [
+            "space",
+            "tab",
+            "enter",
+            "esc",
+            "backspace",
+            "delete",
+            "up",
+            "down",
+            "left",
+            "right",
+            "home",
+            "end",
+            "pageup",
+            "pagedown",
+        ];
+        let shown = |os| -> Vec<String> {
+            names
+                .iter()
+                .map(|name| parse(&format!("Ctrl+{name}"), os).unwrap().display(os))
+                .collect()
+        };
+
+        assert_eq!(
+            shown(Os::MacOs),
+            [
+                "⌃Space",
+                "⌃⇥",
+                "⌃↩",
+                "⌃⎋",
+                "⌃⌫",
+                "⌃⌦",
+                "⌃↑",
+                "⌃↓",
+                "⌃←",
+                "⌃→",
+                "⌃Home",
+                "⌃End",
+                "⌃PageUp",
+                "⌃PageDown"
+            ]
+        );
+        assert_eq!(
+            shown(Os::Linux),
+            [
+                "Ctrl+Space",
+                "Ctrl+Tab",
+                "Ctrl+Enter",
+                "Ctrl+Esc",
+                "Ctrl+Backspace",
+                "Ctrl+Delete",
+                "Ctrl+↑",
+                "Ctrl+↓",
+                "Ctrl+←",
+                "Ctrl+→",
+                "Ctrl+Home",
+                "Ctrl+End",
+                "Ctrl+PageUp",
+                "Ctrl+PageDown"
+            ]
+        );
     }
 
     #[test]

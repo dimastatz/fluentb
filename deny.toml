@@ -31,6 +31,9 @@ allow = [
 confidence-threshold = 0.9
 # The allow list covers expected future dependencies, not just current ones.
 unused-allowed-license = "allow"
+# MPL-2.0 is file-level copyleft: fine to ship unmodified in an MIT app. Allowed for
+# this crate only (reached through tray-icon's Linux `dirs` dependency), not globally.
+exceptions = [{ name = "option-ext", allow = ["MPL-2.0"] }]
 
 [bans]
 multiple-versions = "warn"
