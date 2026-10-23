@@ -1,5 +1,7 @@
 # M2 — Configuration
 
+**Status:** Done
+
 ## Summary
 
 Let users change hotkeys, transcription settings, and rewrite style through a TOML file, with safe defaults when the file is missing or invalid.
@@ -69,6 +71,18 @@ Let users change hotkeys, transcription settings, and rewrite style through a TO
 - [ ] An invalid value produces a notification naming the key and falls back to its default.
 - [ ] Conflicting hotkeys are rejected with a clear message.
 - [ ] Coverage ≥ 95%.
+
+## Implementation notes
+
+Decisions made while building M2:
+
+- `parse(text, os) -> (Config, Vec<ConfigWarning>)` never fails. The spec had `Result<Config, ConfigError>`, but the acceptance criteria require an invalid value to fall back to *its own* default, so parsing goes key by key. Only a TOML syntax error falls back to all the defaults.
+- A hotkey conflict resets **both** hotkeys to their defaults, because resetting just one could collide again with the other.
+- Shift alone doesn't count as a modifier (`Shift+D` would steal ordinary typing); a hotkey needs Ctrl, Alt, or Cmd/Super.
+- `HotkeyBinding.accelerator` is now a validated `Accelerator` instead of a `String`, so platform code never sees an invalid hotkey.
+- The config path is worked out from environment variables by a pure function (`path_for`). The `directories` crate was dropped: its `option-ext` dependency is MPL-2.0, which the cargo-deny license policy rejects.
+- The default file is created with `create_new`, so it never overwrites a file that appears at the same moment.
+- `run_app` shows every config warning in a single notification at startup.
 
 ## Open questions
 

@@ -97,20 +97,32 @@ CI also checks that the crate builds with the minimum supported Rust version (1.
 
 On first launch, fluentb downloads the speech and rewrite models and asks for **Microphone** and **Accessibility** permissions. Accessibility access is needed to insert text into other apps.
 
-Settings live in `~/Library/Application Support/fluentb/config.toml`:
+Settings live in `config.toml`, which fluentb creates with comments on first run:
+
+| OS      | Location                                              |
+| ------- | ----------------------------------------------------- |
+| macOS   | `~/Library/Application Support/fluentb/config.toml`   |
+| Windows | `%APPDATA%\fluentb\config.toml`                       |
+| Linux   | `$XDG_CONFIG_HOME/fluentb/config.toml` (or `~/.config/fluentb/config.toml`) |
 
 ```toml
+version = 1
+
 [hotkeys]
+# Cmd means Command on macOS and Ctrl on Windows and Linux.
 dictate = "Cmd+Shift+D"
 rewrite = "Cmd+Shift+R"
 
 [dictation]
-model = "base.en"
-language = "auto"
+model = "base.en"     # tiny, base, small, medium (optionally .en), or large-v3
+language = "auto"     # or a two-letter code such as "en" or "he"
+mode = "toggle"       # or "push-to-talk"
 
 [rewrite]
-style = "neutral"
+style = "neutral"     # neutral, casual, formal, or concise
 ```
+
+Any missing or invalid setting falls back to its default, and fluentb shows one notification at startup listing every problem.
 
 ## Architecture
 
@@ -175,7 +187,7 @@ Each milestone has a PRD in [`docs/specs/`](docs/specs/README.md).
 
 - [x] M0: Foundation (`Facade` trait, CI with coverage gate)
 - [x] M1: Pure state manager
-- [ ] M2: Configuration
+- [x] M2: Configuration
 - [ ] M3: macOS dictation end to end
 - [ ] M4: Tray app shell
 - [ ] M5: Local rewrite

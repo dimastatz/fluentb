@@ -10,6 +10,6 @@ pub mod state;
 pub mod transition;
 
 pub use effect::Effect;
-pub use runtime::{default_bindings, dispatch, run_app};
+pub use runtime::{dispatch, run_app};
 pub use state::{Event, State};
 pub use transition::next;
