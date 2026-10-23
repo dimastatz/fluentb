@@ -120,6 +120,55 @@ fluentb has a pure core with side effects at the edges:
 - **`Facade` trait** ([`src/facade.rs`](src/facade.rs)): the single boundary to the outside world, covering hotkeys, microphone, Whisper, rewrite engine, text insertion and tray.
 - **Platform implementations:** one `Facade` per OS. Tests use a fake implementation, so the core is fully tested without real hardware.
 
+```mermaid
+flowchart TB
+    subgraph core["Pure core: src/app"]
+        transition["transition::next<br/>(State, Event) → (State, Effects)"]
+        runtime["runtime::dispatch<br/>runs each Effect, feeds the result back as an Event"]
+    end
+
+    subgraph facade["Facade trait: one implementation per OS"]
+        input["next_event()"]
+        audio["start_recording()<br/>stop_recording()"]
+        models["transcribe(): Whisper<br/>rewrite(): local LLM"]
+        text["selected_text()<br/>insert_text()"]
+        status["set_tray_status()<br/>notify()"]
+    end
+
+    subgraph os["Operating system"]
+        hotkeys["Global hotkeys<br/>tray menu"]
+        mic["Microphone"]
+        apps["Focused app<br/>(Slack, Gmail, VS Code…)"]
+        tray["Tray icon<br/>notifications"]
+    end
+
+    transition <--> runtime
+    runtime <--> input & audio & models & text & status
+    input <--> hotkeys
+    audio <--> mic
+    text <--> apps
+    status --> tray
+```
+
+`transition::next` is a pure function that decides what happens. `runtime::dispatch` is the only code that calls the `Facade`, and it feeds each result back into `next` as an `Event`. Audio and text never leave the machine: Whisper and the rewrite model both run locally.
+
+The core moves through these states:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Recording: Dictate hotkey
+    Recording --> Transcribing: Dictate hotkey
+    Transcribing --> Idle: text inserted
+    Idle --> Rewriting: Rewrite hotkey
+    Rewriting --> Idle: selection replaced, or no selection
+    note right of Idle
+        Any failure: notify the user and return to Idle.
+        Quit exits from any state.
+        Hotkeys are ignored while busy.
+    end note
+```
+
 ## Roadmap
 
 Each milestone has a PRD in [`docs/specs/`](docs/specs/README.md).
