@@ -1,5 +1,7 @@
 # M3 — macOS dictation end to end
 
+**Status:** In review (manual checklist pending)
+
 ## Summary
 
 Implement the macOS `Facade` for the dictation path: global hotkeys, microphone capture, local Whisper transcription, and text insertion into the focused app. This is the first build a person can actually use.
@@ -64,6 +66,20 @@ Implement the macOS `Facade` for the dictation path: global hotkeys, microphone 
 - [ ] The microphone indicator turns off when recording stops.
 - [ ] Denied permissions produce the correct notification.
 - [ ] CI stays green on `macos-latest`.
+
+## Implementation notes
+
+Decisions made while building M3:
+
+- **Threads:** macOS requires global hotkeys to be registered and delivered on the main thread, so the main thread runs a `tao` event loop (the same loop M4's tray will use) with `ActivationPolicy::Accessory` (no Dock icon). The state manager runs on a worker thread; `register_hotkeys` asks the main thread through an event-loop proxy and waits for the reply. Transcription runs on the worker, off the event thread.
+- **Audio:** the cpal callback sends sample chunks over a channel, so no buffer is shared between threads. Recordings under 300 ms are treated as accidental taps and not transcribed.
+- **Text insertion:** clipboard + Cmd+V, then the previous clipboard *text* is restored after 250 ms. Images or files on the clipboard are not preserved yet.
+- **Notifications:** `osascript` for now, because native notifications need an app bundle (M8).
+- **Model:** read from `~/Library/Application Support/fluentb/models/ggml-<model>.bin` and kept in memory. Loading with Metal takes several seconds, so it runs on a background thread: hotkeys work immediately and the first transcription waits for the load if needed. A missing model is reported at startup with the download URL; M6 automates the download.
+- **Measured on Apple Silicon:** startup is immediate; idle CPU 0%; memory about 256 MB with `base.en` loaded.
+- **Rewrite:** not available yet (M5); pressing the Rewrite hotkey shows a notification saying so.
+- **Coverage:** `src/main.rs` and `src/platform/macos/` are excluded from coverage (`--ignore-filename-regex`); everything else, including the hotkey mapping, audio conversion and transcript cleanup, is unit tested. An ignored test (`cargo test -- --ignored`) transcribes real speech generated with `say`.
+- **Toolchain:** the minimum Rust version rises from 1.85 to 1.88, required by `tao`'s `url` → ICU dependencies. cargo-deny now allows the permissive Unlicense (whisper-rs) and BSL-1.0 (arboard's Windows deps), and ignores RUSTSEC-2024-0370, which is only reachable through tao's Linux GTK backend.
 
 ## Open questions
 

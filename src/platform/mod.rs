@@ -1,7 +1,13 @@
-//! Which operating system fluentb runs on.
+//! Operating-system support.
 //!
-//! Pure code takes an [`Os`] as a parameter instead of checking `cfg!` itself, so
-//! behaviour for every OS can be tested on any machine.
+//! [`Os`] says which OS fluentb runs on. Pure code takes it as a parameter instead of
+//! checking `cfg!` itself, so behaviour for every OS can be tested on any machine.
+//! Each OS's `Facade` implementation lives in its own submodule.
+
+pub mod applescript;
+pub mod keymap;
+#[cfg(target_os = "macos")]
+pub mod macos;
 
 /// The operating systems fluentb targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

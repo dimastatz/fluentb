@@ -47,8 +47,10 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+      # OS glue (main.rs, platform/macos) is excluded from coverage and tested by hand;
+      # all logic lives in pure, unit-tested modules.
       - name: Test with coverage (minimum 95% lines)
-        run: cargo llvm-cov --locked --all-targets --fail-under-lines 95
+        run: cargo llvm-cov --locked --all-targets --ignore-filename-regex 'src/main\.rs|src/platform/macos/' --fail-under-lines 95
 
   msrv:
     name: Minimum supported Rust version
@@ -59,7 +61,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           # Keep in sync with `rust-version` in Cargo.toml.
-          toolchain: "1.85"
+          toolchain: "1.88"
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
