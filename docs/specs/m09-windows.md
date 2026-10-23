@@ -36,6 +36,8 @@ Implement the `Facade` for Windows 10/11 so dictation and rewrite work the same 
 10. **Launch at login** — `HKCU\…\Run` registry key.
 11. **Packaging** — MSI via `cargo-wix` or an MSIX/winget manifest, code-signed (Authenticode). Add it to the release workflow.
 
+12. **Adapter** — all of the above lives in the `platform::windows` adapter, selected by `platform::run()` (see [Platform architecture](README.md#platform-architecture)). Windows-only crates go under `[target.'cfg(windows)'.dependencies]`.
+
 ### Non-functional
 
 - CI matrix adds `windows-latest`: fmt, clippy, tests, and coverage on the core.
