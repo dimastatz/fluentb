@@ -16,6 +16,7 @@ enum Outcome {
 }
 
 /// The hotkeys used until configuration lands (M2).
+#[must_use]
 pub fn default_bindings() -> Vec<HotkeyBinding> {
     vec![
         HotkeyBinding {

@@ -60,7 +60,7 @@ fluentb is in **early development** and is not usable yet. The core interfaces a
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) (stable toolchain)
+- [Rust](https://rustup.rs/) 1.85 or later
 - macOS 13 or later (for running the app once the macOS integration lands)
 
 ### Build from source
@@ -73,17 +73,18 @@ cargo build --release
 
 ### Run the checks
 
+These are the checks CI runs on every pull request:
+
 ```sh
 cargo fmt --all --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+cargo clippy --locked --all-targets -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
+cargo llvm-cov --locked --all-targets --fail-under-lines 95   # cargo install cargo-llvm-cov
+cargo deny check                                              # cargo install cargo-deny
+cargo machete                                                 # cargo install cargo-machete
 ```
 
-CI also enforces at least 95% line coverage with [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov):
-
-```sh
-cargo llvm-cov --fail-under-lines 95
-```
+CI also checks that the crate builds with the minimum supported Rust version (1.85).
 
 ## Usage
 
@@ -141,7 +142,7 @@ Contributions are welcome. Please open an issue to discuss larger changes first.
 
 1. Fork the repository and create a branch.
 2. Follow the conventions in [`CLAUDE.md`](CLAUDE.md): functional style, side effects behind the `Facade`, and no `unwrap`/`expect` outside tests.
-3. Make sure `cargo fmt`, `cargo clippy -- -D warnings`, and `cargo test` pass, and that coverage stays at or above 95%.
+3. Make sure the [checks](#run-the-checks) pass, and that coverage stays at or above 95%.
 4. Open a pull request.
 
 ## License

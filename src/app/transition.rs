@@ -11,6 +11,7 @@ pub const EMPTY_REWRITE: &str = "Rewrite returned no text; your text was left un
 ///
 /// Total over every `(state, event)` pair: anything not listed (a hotkey while busy,
 /// a stray result) leaves the state unchanged and does nothing.
+#[must_use]
 pub fn next(state: State, event: Event) -> (State, Vec<Effect>) {
     match (state, event) {
         (State::Recording, Event::Input(InputEvent::QuitRequested)) => {
@@ -46,7 +47,6 @@ pub fn next(state: State, event: Event) -> (State, Vec<Effect>) {
         (State::Transcribing, Event::Transcribed(text)) if is_blank(&text) => {
             (State::Idle, vec![Effect::SetTray(TrayStatus::Idle)])
         }
-        (State::Transcribing, Event::Transcribed(text)) => (State::Idle, insert(text)),
 
         (State::Idle, Event::Input(InputEvent::HotkeyPressed(Hotkey::Rewrite))) => {
             (State::Rewriting, vec![Effect::ReadSelection])
@@ -68,7 +68,8 @@ pub fn next(state: State, event: Event) -> (State, Vec<Effect>) {
                 Effect::Notify(EMPTY_REWRITE.into()),
             ],
         ),
-        (State::Rewriting, Event::Rewritten(text)) => (State::Idle, insert(text)),
+        (State::Transcribing, Event::Transcribed(text))
+        | (State::Rewriting, Event::Rewritten(text)) => (State::Idle, insert(text)),
 
         (state, _) => (state, Vec::new()),
     }
@@ -126,7 +127,7 @@ mod tests {
             Event::SelectionRead(Some("\n".into())),
             Event::SelectionRead(None),
             Event::Rewritten("text".into()),
-            Event::Rewritten("".into()),
+            Event::Rewritten(String::new()),
             Event::Failed(FacadeError::Rewrite("boom".into())),
         ]
     }
@@ -197,7 +198,7 @@ mod tests {
             ),
             (
                 State::Rewriting,
-                Event::Rewritten("".into()),
+                Event::Rewritten(String::new()),
                 State::Idle,
                 vec![tray(TrayStatus::Idle), Effect::Notify(EMPTY_REWRITE.into())],
             ),
@@ -222,7 +223,7 @@ mod tests {
                     next(state, event.clone()),
                     (expected_state, expected_effects),
                     "{state:?} + {event:?}"
-                )
+                );
             });
     }
 
@@ -261,7 +262,7 @@ mod tests {
         ];
 
         ignored.into_iter().for_each(|(state, key)| {
-            assert_eq!(next(state, hotkey(key)), (state, Vec::new()), "{state:?}")
+            assert_eq!(next(state, hotkey(key)), (state, Vec::new()), "{state:?}");
         });
     }
 
@@ -276,7 +277,7 @@ mod tests {
         ];
 
         stray.into_iter().for_each(|(state, event)| {
-            assert_eq!(next(state, event), (state, Vec::new()), "{state:?}")
+            assert_eq!(next(state, event), (state, Vec::new()), "{state:?}");
         });
     }
 

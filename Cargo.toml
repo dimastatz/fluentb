@@ -2,7 +2,25 @@
 name = "fluentb"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.85"
 description = "Dictate and rewrite text in any app, with local Whisper transcription."
 license = "MIT"
 
 [dependencies]
+
+[lints.rust]
+# Deny, not forbid, so platform modules can opt in with `#![allow(unsafe_code)]`.
+unsafe_code = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# CLAUDE.md: no unwrap/expect/panic outside tests (see clippy.toml).
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+# CLAUDE.md prefers iterator chains, including `for_each`, over `for` loops.
+needless_for_each = "allow"
+# Every fallible API returns `FacadeError`, which already names the failing subsystem.
+missing_errors_doc = "allow"
+# The suggested `assert_eq!(v, [] as [T; 0])` reads worse than `assert!(v.is_empty())`.
+assert_is_empty = "allow"
