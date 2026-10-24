@@ -30,7 +30,7 @@ fluentb uses the **strategy pattern**, with each OS as an **adapter**:
 
 ## Repository state
 
-The crate is at an early stage (M1–M4 implemented; see `docs/specs/` for status). Update this file with build, test, and architecture details as more of the crate lands.
+The crate is at an early stage (M1–M5 implemented; see `docs/specs/` for status). Update this file with build, test, and architecture details as more of the crate lands.
 
 - `src/facade.rs` — the `Facade` trait: the only boundary between the pure core and side effects (hotkeys, microphone, Whisper, rewrite engine, text insertion, tray). Each platform provides its own implementation.
 - `src/app/` — the pure core. `transition::next(state, event) -> (State, Vec<Effect>)` decides everything and returns effects as data; `runtime` is the only code that calls the facade, feeding each effect's result back as an `Event`. Tray updates and notifications are best effort, so a failure to report never triggers another report.
@@ -39,7 +39,9 @@ The crate is at an early stage (M1–M4 implemented; see `docs/specs/` for statu
 - `src/platform/` — all platform-dependent code: `run()` (the single place that picks the OS adapter), `Os`, and helpers shared by platforms: `keymap` (`Accelerator` → `global-hotkey`), `applescript`, `bridge` (routes raw hotkey and menu `Signal`s from one channel to `InputEvent`s), and `instance` (the single-instance file lock). Pure code takes an `Os` parameter instead of using `cfg!`, so every OS's behaviour is testable on any machine.
 - `src/platform/macos/` — the macOS adapter: its `Facade` and entry point (`run`). The main thread runs the `tao` event loop and owns the menu-bar icon (macOS requires hotkeys and the tray there); the state manager runs on a worker thread, reads hotkey and menu events through the bridge channel, and sends `MainRequest`s to register hotkeys and update the icon. This directory is thin OS glue, excluded from coverage and tested by hand: keep logic out of it and in pure modules (`audio`, `transcript`, `models`, `platform::keymap`).
 - `src/tray/` — the tray as data: `menu::menu_model` builds the menu from the config and status, and `icon::icon` draws each status icon in code (no image files).
-- `src/audio.rs`, `src/transcript.rs`, `src/models.rs` — pure helpers: resampling to 16 kHz mono, cleaning Whisper output, model file paths and language selection.
+- `src/rewrite/` — pure rewrite helpers: `prompt` (chat templates as segments, so user text is tokenized without special tokens), `output::clean_output` (strip preambles and wrappers, reject empty or runaway output), `check_length`, and `residency` (when to unload the idle model).
+- `src/audio.rs`, `src/transcript.rs`, `src/models.rs` — pure helpers: resampling to 16 kHz mono, cleaning Whisper output, model files (`Model::Whisper`/`Model::Rewrite`: file names, download URLs, paths) and language selection.
+- llama.cpp is linked **dynamically** (`llama-cpp-2` `dynamic-link`), because whisper-rs links its own ggml statically and two static copies clash. `build.rs` adds the rpaths. `cargo test --release -- --ignored` also runs a real rewrite, which needs `Qwen3-1.7B-Q4_K_M.gguf` in the models folder. `eval/rewrite/` holds the manual model comparison.
 - Building needs CMake and the Xcode Command Line Tools (whisper.cpp). `cargo test -- --ignored` runs a real transcription and needs `ggml-base.en.bin` in `~/Library/Application Support/fluentb/models/`.
 - `src/testing.rs` — `FakeFacade` (test-only): scripted input events, recorded side effects, and per-call failure injection via `Call`.
 

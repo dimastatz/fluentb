@@ -1,6 +1,6 @@
 //! What the app is doing, and the events that move it along.
 
-use crate::facade::{Audio, FacadeError, InputEvent};
+use crate::facade::{Audio, FacadeError, InputEvent, Replacement};
 
 /// What fluentb is currently doing.
 ///
@@ -25,6 +25,7 @@ pub enum Event {
     RecordingStopped(Audio),
     Transcribed(String),
     SelectionRead(Option<String>),
-    Rewritten(String),
+    Rewritten { original: String, rewritten: String },
+    SelectionReplaced(Replacement),
     Failed(FacadeError),
 }

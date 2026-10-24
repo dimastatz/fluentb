@@ -11,7 +11,7 @@ mod warning;
 
 pub use load::{default_path, load, path_for, DEFAULT_FILE};
 pub use parse::parse;
-pub use values::{DictationMode, Language, ModelSize, Style, WhisperModel};
+pub use values::{DictationMode, Language, ModelSize, RewriteModel, Style, WhisperModel};
 pub use warning::ConfigWarning;
 
 use crate::accelerator::{Accelerator, Key, Modifier};
@@ -39,9 +39,21 @@ pub struct Dictation {
     pub mode: DictationMode,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rewrite {
     pub style: Style,
+    pub model: RewriteModel,
+    /// Keep the model in memory instead of unloading it when idle.
+    pub keep_loaded: bool,
+    /// Minutes without a rewrite before the model is unloaded to free memory.
+    pub unload_after_minutes: u32,
+    /// Longer selections are refused rather than rewritten.
+    pub max_characters: usize,
+}
+
+impl Rewrite {
+    pub const DEFAULT_UNLOAD_AFTER_MINUTES: u32 = 10;
+    pub const DEFAULT_MAX_CHARACTERS: usize = 4_000;
 }
 
 impl Config {
@@ -60,6 +72,10 @@ impl Config {
             },
             rewrite: Rewrite {
                 style: Style::Neutral,
+                model: RewriteModel::Qwen3_4B,
+                keep_loaded: false,
+                unload_after_minutes: Rewrite::DEFAULT_UNLOAD_AFTER_MINUTES,
+                max_characters: Rewrite::DEFAULT_MAX_CHARACTERS,
             },
         }
     }

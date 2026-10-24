@@ -41,6 +41,16 @@ pub struct Audio {
     pub sample_rate: u32,
 }
 
+/// How a rewrite reached the user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Replacement {
+    /// The original selection was replaced in place.
+    Replaced,
+    /// The focus or selection changed during the rewrite, so the result was copied to
+    /// the clipboard instead of overwriting something else.
+    Copied,
+}
+
 /// What the tray icon should show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayStatus {
@@ -105,8 +115,13 @@ pub trait Facade {
     /// Returns the text selected in the focused app, or `None` if nothing is selected.
     fn selected_text(&mut self) -> Result<Option<String>>;
 
-    /// Rewrites text into clean, fluent, correctly styled text.
+    /// Rewrites text into clean, fluent, correctly styled text with a local model.
+    /// User text never leaves the machine.
     fn rewrite(&mut self, text: &str) -> Result<String>;
+
+    /// Replaces the selection with `replacement` if it still holds `original`;
+    /// otherwise copies `replacement` to the clipboard.
+    fn replace_selection(&mut self, original: &str, replacement: &str) -> Result<Replacement>;
 
     // Output
 

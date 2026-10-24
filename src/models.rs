@@ -1,39 +1,61 @@
-//! Where Whisper models live on disk and how they are configured.
-//!
-//! M3 loads a model the user placed there; M6 will download it automatically.
+//! Where models live on disk, where they come from, and how Whisper is configured.
 
-use crate::config::{Language, WhisperModel};
+use crate::config::{Language, RewriteModel, WhisperModel};
 use crate::platform::Os;
 use std::path::PathBuf;
 
 const APP_DIR: &str = "fluentb";
 const MODELS_DIR: &str = "models";
 
-/// The model file name used by whisper.cpp releases, e.g. `ggml-base.en.bin`.
-#[must_use]
-pub fn file_name(model: WhisperModel) -> String {
-    format!("ggml-{model}.bin")
+/// A model fluentb runs locally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Model {
+    /// Speech to text, with whisper.cpp.
+    Whisper(WhisperModel),
+    /// Text rewriting, with llama.cpp.
+    Rewrite(RewriteModel),
 }
 
-/// Where to download `model` from (whisper.cpp's official GGML builds).
-#[must_use]
-pub fn download_url(model: WhisperModel) -> String {
-    format!(
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{}",
-        file_name(model)
-    )
+impl Model {
+    /// The file name, as published upstream (e.g. `ggml-base.en.bin`).
+    #[must_use]
+    pub fn file_name(self) -> String {
+        match self {
+            Self::Whisper(model) => format!("ggml-{model}.bin"),
+            Self::Rewrite(model) => rewrite_source(model).1.to_owned(),
+        }
+    }
+
+    /// Where to download the model from: the publisher's own Hugging Face repository,
+    /// or a well-known conversion where the publisher has no GGUF of that size.
+    #[must_use]
+    pub fn download_url(self) -> String {
+        let repository = match self {
+            Self::Whisper(_) => "ggerganov/whisper.cpp",
+            Self::Rewrite(model) => rewrite_source(model).0,
+        };
+        format!(
+            "https://huggingface.co/{repository}/resolve/main/{}",
+            self.file_name()
+        )
+    }
 }
 
-/// The model file path for `os`, given a way to read environment variables.
+/// The Hugging Face repository and file of each rewrite model (`Q4_K_M` quantization).
+const fn rewrite_source(model: RewriteModel) -> (&'static str, &'static str) {
+    match model {
+        RewriteModel::Qwen3_4B => ("Qwen/Qwen3-4B-GGUF", "Qwen3-4B-Q4_K_M.gguf"),
+        RewriteModel::Gemma3_4B => ("ggml-org/gemma-3-4b-it-GGUF", "gemma-3-4b-it-Q4_K_M.gguf"),
+        RewriteModel::Qwen3_1_7B => ("unsloth/Qwen3-1.7B-GGUF", "Qwen3-1.7B-Q4_K_M.gguf"),
+    }
+}
+
+/// The models directory for `os`, given a way to read environment variables.
 ///
 /// - macOS: `~/Library/Application Support/fluentb/models/`
 /// - Windows: `%LOCALAPPDATA%\fluentb\models\`
 /// - Linux: `$XDG_DATA_HOME/fluentb/models/`, or `~/.local/share/fluentb/models/`
-pub fn path_for(
-    os: Os,
-    env: impl Fn(&str) -> Option<String>,
-    model: WhisperModel,
-) -> Option<PathBuf> {
+pub fn dir_for(os: Os, env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
     let var = |name: &str| {
         env(name)
             .filter(|value| !value.is_empty())
@@ -46,12 +68,27 @@ pub fn path_for(
             .filter(|dir| dir.is_absolute())
             .or_else(|| var("HOME").map(|home| home.join(".local").join("share"))),
     };
-    base.map(|dir| dir.join(APP_DIR).join(MODELS_DIR).join(file_name(model)))
+    base.map(|dir| dir.join(APP_DIR).join(MODELS_DIR))
+}
+
+/// The models directory on this machine.
+#[must_use]
+pub fn default_dir() -> Option<PathBuf> {
+    dir_for(Os::current(), |name| std::env::var(name).ok())
+}
+
+/// The model file path for `os`, given a way to read environment variables.
+///
+/// - macOS: `~/Library/Application Support/fluentb/models/`
+/// - Windows: `%LOCALAPPDATA%\fluentb\models\`
+/// - Linux: `$XDG_DATA_HOME/fluentb/models/`, or `~/.local/share/fluentb/models/`
+pub fn path_for(os: Os, env: impl Fn(&str) -> Option<String>, model: Model) -> Option<PathBuf> {
+    dir_for(os, env).map(|dir| dir.join(model.file_name()))
 }
 
 /// The model file path on this machine.
 #[must_use]
-pub fn default_path(model: WhisperModel) -> Option<PathBuf> {
+pub fn default_path(model: Model) -> Option<PathBuf> {
     path_for(Os::current(), |name| std::env::var(name).ok(), model)
 }
 
@@ -80,6 +117,7 @@ mod tests {
         size: ModelSize::LargeV3,
         english_only: false,
     };
+    const BASE_EN_MODEL: Model = Model::Whisper(BASE_EN);
 
     fn env(vars: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
         move |name| {
@@ -90,12 +128,30 @@ mod tests {
     }
 
     #[test]
-    fn names_files_like_whisper_cpp() {
-        assert_eq!(file_name(BASE_EN), "ggml-base.en.bin");
-        assert_eq!(
-            download_url(LARGE),
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin"
-        );
+    fn names_files_like_their_publishers() {
+        assert_eq!(BASE_EN_MODEL.file_name(), "ggml-base.en.bin");
+        let cases = [
+            (
+                Model::Whisper(LARGE),
+                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
+            ),
+            (
+                Model::Rewrite(RewriteModel::Qwen3_4B),
+                "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            ),
+            (
+                Model::Rewrite(RewriteModel::Gemma3_4B),
+                "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
+            ),
+            (
+                Model::Rewrite(RewriteModel::Qwen3_1_7B),
+                "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf",
+            ),
+        ];
+
+        cases
+            .iter()
+            .for_each(|(model, url)| assert_eq!(model.download_url(), *url, "{model:?}"));
     }
 
     #[test]
@@ -126,7 +182,7 @@ mod tests {
 
         cases.into_iter().for_each(|(os, expected, env)| {
             assert_eq!(
-                path_for(os, env, BASE_EN),
+                path_for(os, env, BASE_EN_MODEL),
                 expected.map(PathBuf::from),
                 "{os:?}"
             );
@@ -135,7 +191,9 @@ mod tests {
 
     #[test]
     fn default_path_ends_in_the_model_file() {
-        assert!(default_path(BASE_EN).is_none_or(|path| path.ends_with("models/ggml-base.en.bin")));
+        assert!(default_path(BASE_EN_MODEL)
+            .is_none_or(|path| path.ends_with("models/ggml-base.en.bin")));
+        assert!(default_dir().is_none_or(|dir| dir.ends_with("fluentb/models")));
     }
 
     #[test]

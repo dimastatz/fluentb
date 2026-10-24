@@ -83,10 +83,20 @@ fn perform(effect: Effect, facade: &mut dyn Facade) -> Outcome {
                 .selected_text()
                 .map_or_else(Event::Failed, Event::SelectionRead),
         ),
-        Effect::Rewrite(text) => Some(
+        Effect::Rewrite(original) => Some(facade.rewrite(&original).map_or_else(
+            Event::Failed,
+            |rewritten| Event::Rewritten {
+                original,
+                rewritten,
+            },
+        )),
+        Effect::ReplaceSelection {
+            original,
+            replacement,
+        } => Some(
             facade
-                .rewrite(&text)
-                .map_or_else(Event::Failed, Event::Rewritten),
+                .replace_selection(&original, &replacement)
+                .map_or_else(Event::Failed, Event::SelectionReplaced),
         ),
         Effect::InsertText(text) => facade.insert_text(&text).err().map(Event::Failed),
         Effect::SetTray(status) => {
@@ -105,7 +115,7 @@ fn perform(effect: Effect, facade: &mut dyn Facade) -> Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::transition::{EMPTY_REWRITE, NO_SELECTION};
+    use crate::app::transition::{COPIED, EMPTY_REWRITE, NO_SELECTION};
     use crate::facade::{FacadeError, Hotkey, InputEvent, TrayStatus};
     use crate::platform::Os;
     use crate::testing::{Call, FakeFacade};
@@ -170,6 +180,22 @@ mod tests {
     }
 
     #[test]
+    fn rewrite_is_copied_when_the_selection_changed() {
+        let mut facade = FakeFacade {
+            selection: Some("draft".into()),
+            selection_after_rewrite: Some("something else".into()),
+            ..FakeFacade::with_events([REWRITE, QUIT])
+        };
+
+        run(&mut facade);
+
+        assert!(facade.inserted.is_empty());
+        assert_eq!(facade.clipboard, ["draft"]);
+        assert_eq!(facade.notifications, [COPIED]);
+        assert_eq!(facade.tray.last(), Some(&TrayStatus::Idle));
+    }
+
+    #[test]
     fn rewrite_without_selection_notifies_user() {
         let mut facade = FakeFacade::with_events([REWRITE, QUIT]);
 
@@ -182,7 +208,11 @@ mod tests {
     #[test]
     fn blank_rewrite_leaves_text_unchanged() {
         let mut facade = FakeFacade::default();
-        let state = dispatch(State::Rewriting, Event::Rewritten(" ".into()), &mut facade);
+        let rewritten = Event::Rewritten {
+            original: "draft".into(),
+            rewritten: " ".into(),
+        };
+        let state = dispatch(State::Rewriting, rewritten, &mut facade);
 
         assert_eq!(state, Some(State::Idle));
         assert!(facade.inserted.is_empty());
@@ -200,6 +230,7 @@ mod tests {
             (Call::InsertText, vec![DICTATE, DICTATE], 1),
             (Call::SelectedText, vec![REWRITE, REWRITE], 2),
             (Call::Rewrite, vec![REWRITE, REWRITE], 2),
+            (Call::ReplaceSelection, vec![REWRITE, REWRITE], 2),
         ];
 
         failing.into_iter().for_each(|(call, script, attempts)| {

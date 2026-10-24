@@ -1,5 +1,7 @@
 # M5 — Rewrite
 
+**Status:** In review (manual checklist pending)
+
 ## Summary
 
 Implement the Rewrite hotkey: read the selected text in the focused app, rewrite it into clean, fluent, correctly styled text with a **local** language model, and replace the selection with the result. Like dictation, rewrite never sends user content off the machine.
@@ -105,6 +107,38 @@ The evaluation script and inputs live in `eval/rewrite/` and run manually. They 
 - [ ] Engine failure leaves the original text intact and shows a notification.
 - [ ] Non-English input stays in the same language.
 - [ ] The model is unloaded after the idle period.
+
+## Implementation notes
+
+Decisions made while building M5:
+
+- **Core:** the rewrite flow from M1 gained one step. After a rewrite, the core asks the facade to `replace_selection(original, replacement)`. The facade re-reads the selection and pastes only if it still holds the original text; otherwise it copies the result to the clipboard (`Replacement::Copied`), and the core notifies the user. No `RewriteEngine` trait was needed: `FakeFacade` covers the state-manager tests, and llama.cpp runs any GGUF model, so swapping models is a config change.
+- **Pure helpers** in `src/rewrite/`, all fully tested:
+  - `prompt` builds ChatML (Qwen3, with thinking switched off by an empty think block) and Gemma prompts as segments. Template parts are tokenized with special tokens and the user's text without them, so a selection containing `<|im_end|>` can't break out of its turn.
+  - `output::clean_output` strips think blocks, `<text>` tags, preambles, wrappers and line-end spaces, rejects empty or runaway output (over 3× the input plus 20 characters), and keeps the original's surrounding whitespace.
+  - `check_length` enforces the selection limit, and `max_new_tokens` caps generation at 1.5× the input plus 64 tokens.
+  - `residency::UnloadPolicy` decides when to unload the model.
+- **Reading the selection (macOS):**
+  - The Accessibility API is tried first (`AXFocusedUIElement` → `AXSelectedText`). Before reading, fluentb sets `AXManualAccessibility` on the focused app, so Electron apps (Slack, VS Code) expose their text.
+  - If that returns nothing, fluentb presses Cmd+C and polls the clipboard for up to 500 ms, then restores it.
+- **Engine:** `llama-cpp-2` with Metal, loaded on the first rewrite, with every layer on the GPU, temperature 0.2 and a fixed seed. llama.cpp and ggml logging is switched off, so no text is ever printed.
+  - The worker wakes up when the idle period ends (`bridge::next_route_within`) and drops the model to free its memory.
+- **Linking:** whisper-rs links its own ggml statically, so a second static ggml from llama.cpp produced hundreds of duplicate-symbol warnings: one copy would silently replace the other. llama.cpp is therefore linked dynamically (`dynamic-link`). `build.rs` adds rpaths for `cargo run`, test binaries and the app bundle's `Frameworks` folder (M8 must copy the dylibs there).
+- **Model choice:** see [`eval/rewrite/RESULTS.md`](../../eval/rewrite/RESULTS.md). Qwen3-4B and Gemma 3 4B were close on 16 samples, so the licence rule made Qwen3-4B the default.
+  - Measured: about 1.5 s to load and 2–2.5 s for a typical message.
+  - The light Qwen3-1.7B takes about 1 s.
+- **Privacy:** `cargo tree -p llama-cpp-2` contains no HTTP or networking crates.
+- **Config:** `[rewrite]` gained `model`, `keep_loaded`, `unload_after_minutes` and `max_characters`.
+
+## Manual checklist
+
+- [ ] Rewrite replaces the selection in Slack, Gmail (Chrome or Safari), VS Code and Notes.
+- [ ] Hebrew or another non-English text stays in its language.
+- [ ] Works with Wi-Fi turned off.
+- [ ] Changing the selection during a rewrite copies the result to the clipboard and notifies.
+- [ ] The clipboard holds its previous text after a rewrite that used the Cmd+C fallback.
+- [ ] Rewriting with no selection notifies "Select some text to rewrite". (VS Code copies the whole line when nothing is selected; check this case.)
+- [ ] With `unload_after_minutes = 1`, memory drops about a minute after a rewrite.
 
 ## Open questions
 

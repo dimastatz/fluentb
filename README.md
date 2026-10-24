@@ -48,11 +48,11 @@ Everything runs on your machine:
 
 ## Project status
 
-fluentb is in **early development**. On macOS, fluentb runs in the menu bar and dictation works: press the Dictate hotkey, speak, press it again, and the text is typed into the focused app. Rewrite (M5) and automatic model downloads (M6) are next.
+fluentb is in **early development**. On macOS, fluentb runs in the menu bar, and both hotkeys work: dictation types what you say into the focused app, and rewrite replaces the selected text with a polished version from a local model. Automatic model downloads (M6) are next.
 
 | Platform | Status    |
 | -------- | --------- |
-| macOS    | Dictation works (menu-bar app, built from source) |
+| macOS    | Dictation and rewrite work (menu-bar app, built from source) |
 | Windows  | Planned   |
 | Linux    | Planned   |
 
@@ -85,6 +85,13 @@ cargo build --release
 2. Run fluentb from a terminal: `cargo run --release`.
 3. Allow your terminal app **Microphone** and **Accessibility** access in System Settings → Privacy & Security when macOS asks. Accessibility is needed to type into other apps.
 4. Click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
+
+To try rewrite, download the rewrite model (about 2.5 GB) to the same folder, then select some text in any app and press `⌘⇧R`:
+
+```sh
+curl -L -o ~/Library/Application\ Support/fluentb/models/Qwen3-4B-Q4_K_M.gguf \
+  https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
+```
 
 fluentb shows a microphone in the menu bar: an outline when idle, red while recording, and three dots while transcribing. Its menu lists your hotkeys, opens the config, and quits the app. Only one copy runs at a time.
 
@@ -140,6 +147,10 @@ mode = "toggle"       # or "push-to-talk"
 
 [rewrite]
 style = "neutral"     # neutral, casual, formal, or concise
+model = "qwen3-4b"    # qwen3-4b, gemma3-4b, or qwen3-1.7b (lighter)
+unload_after_minutes = 10  # free the model's memory when idle
+keep_loaded = false
+max_characters = 4000
 ```
 
 Any missing or invalid setting falls back to its default, and fluentb shows one notification at startup listing every problem.

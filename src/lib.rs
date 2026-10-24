@@ -5,6 +5,7 @@ pub mod config;
 pub mod facade;
 pub mod models;
 pub mod platform;
+pub mod rewrite;
 pub mod transcript;
 pub mod tray;
 

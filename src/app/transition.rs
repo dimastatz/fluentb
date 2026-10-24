@@ -2,10 +2,12 @@
 
 use super::effect::Effect;
 use super::state::{Event, State};
-use crate::facade::{FacadeError, Hotkey, InputEvent, TrayStatus};
+use crate::facade::{FacadeError, Hotkey, InputEvent, Replacement, TrayStatus};
 
 pub const NO_SELECTION: &str = "Select some text to rewrite";
 pub const EMPTY_REWRITE: &str = "Rewrite returned no text; your text was left unchanged";
+pub const COPIED: &str =
+    "The selection changed during the rewrite, so the result was copied to the clipboard";
 
 /// Decides the next state and the effects to run for `event` in `state`.
 ///
@@ -61,15 +63,37 @@ pub fn next(state: State, event: Event) -> (State, Vec<Effect>) {
         (State::Rewriting, Event::SelectionRead(_)) => {
             (State::Idle, vec![Effect::Notify(NO_SELECTION.into())])
         }
-        (State::Rewriting, Event::Rewritten(text)) if is_blank(&text) => (
+        (State::Rewriting, Event::Rewritten { rewritten, .. }) if is_blank(&rewritten) => (
             State::Idle,
             vec![
                 Effect::SetTray(TrayStatus::Idle),
                 Effect::Notify(EMPTY_REWRITE.into()),
             ],
         ),
-        (State::Transcribing, Event::Transcribed(text))
-        | (State::Rewriting, Event::Rewritten(text)) => (State::Idle, insert(text)),
+        (
+            State::Rewriting,
+            Event::Rewritten {
+                original,
+                rewritten,
+            },
+        ) => (
+            state,
+            vec![Effect::ReplaceSelection {
+                original,
+                replacement: rewritten,
+            }],
+        ),
+        (State::Rewriting, Event::SelectionReplaced(Replacement::Replaced)) => {
+            (State::Idle, vec![Effect::SetTray(TrayStatus::Idle)])
+        }
+        (State::Rewriting, Event::SelectionReplaced(Replacement::Copied)) => (
+            State::Idle,
+            vec![
+                Effect::SetTray(TrayStatus::Idle),
+                Effect::Notify(COPIED.into()),
+            ],
+        ),
+        (State::Transcribing, Event::Transcribed(text)) => (State::Idle, insert(text)),
 
         (state, _) => (state, Vec::new()),
     }
@@ -115,6 +139,13 @@ mod tests {
         }
     }
 
+    fn rewritten(text: &str) -> Event {
+        Event::Rewritten {
+            original: "draft".into(),
+            rewritten: text.into(),
+        }
+    }
+
     fn all_events() -> Vec<Event> {
         vec![
             hotkey(Hotkey::Dictate),
@@ -126,8 +157,10 @@ mod tests {
             Event::SelectionRead(Some("text".into())),
             Event::SelectionRead(Some("\n".into())),
             Event::SelectionRead(None),
-            Event::Rewritten("text".into()),
-            Event::Rewritten(String::new()),
+            rewritten("text"),
+            rewritten(""),
+            Event::SelectionReplaced(Replacement::Replaced),
+            Event::SelectionReplaced(Replacement::Copied),
             Event::Failed(FacadeError::Rewrite("boom".into())),
         ]
     }
@@ -167,6 +200,35 @@ mod tests {
                 vec![tray(TrayStatus::Idle)],
             ),
             (
+                State::Recording,
+                Event::Input(InputEvent::QuitRequested),
+                State::Recording,
+                vec![Effect::DiscardRecording, Effect::Exit],
+            ),
+            (
+                State::Idle,
+                Event::Input(InputEvent::QuitRequested),
+                State::Idle,
+                vec![Effect::Exit],
+            ),
+        ];
+
+        cases
+            .into_iter()
+            .for_each(|(state, event, expected_state, expected_effects)| {
+                assert_eq!(
+                    next(state, event.clone()),
+                    (expected_state, expected_effects),
+                    "{state:?} + {event:?}"
+                );
+            });
+    }
+
+    #[test]
+    fn follows_the_rewrite_transitions() {
+        let tray = |status| Effect::SetTray(status);
+        let cases = [
+            (
                 State::Idle,
                 hotkey(Hotkey::Rewrite),
                 State::Rewriting,
@@ -192,27 +254,30 @@ mod tests {
             ),
             (
                 State::Rewriting,
-                Event::Rewritten("Draft.".into()),
-                State::Idle,
-                vec![Effect::InsertText("Draft.".into()), tray(TrayStatus::Idle)],
+                rewritten("Draft."),
+                State::Rewriting,
+                vec![Effect::ReplaceSelection {
+                    original: "draft".into(),
+                    replacement: "Draft.".into(),
+                }],
             ),
             (
                 State::Rewriting,
-                Event::Rewritten(String::new()),
+                Event::SelectionReplaced(Replacement::Replaced),
+                State::Idle,
+                vec![tray(TrayStatus::Idle)],
+            ),
+            (
+                State::Rewriting,
+                Event::SelectionReplaced(Replacement::Copied),
+                State::Idle,
+                vec![tray(TrayStatus::Idle), Effect::Notify(COPIED.into())],
+            ),
+            (
+                State::Rewriting,
+                rewritten(""),
                 State::Idle,
                 vec![tray(TrayStatus::Idle), Effect::Notify(EMPTY_REWRITE.into())],
-            ),
-            (
-                State::Recording,
-                Event::Input(InputEvent::QuitRequested),
-                State::Recording,
-                vec![Effect::DiscardRecording, Effect::Exit],
-            ),
-            (
-                State::Idle,
-                Event::Input(InputEvent::QuitRequested),
-                State::Idle,
-                vec![Effect::Exit],
             ),
         ];
 
@@ -272,7 +337,8 @@ mod tests {
             (State::Idle, Event::RecordingStopped(audio())),
             (State::Idle, Event::Transcribed("late".into())),
             (State::Recording, Event::SelectionRead(None)),
-            (State::Transcribing, Event::Rewritten("late".into())),
+            (State::Transcribing, rewritten("late")),
+            (State::Idle, Event::SelectionReplaced(Replacement::Replaced)),
             (State::Rewriting, Event::Transcribed("late".into())),
         ];
 
