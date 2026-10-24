@@ -3,6 +3,37 @@
 use std::fmt;
 use std::str::FromStr;
 
+/// A model setting: `auto` lets fluentb choose for this machine (see
+/// `models::choose_whisper` and `models::choose_rewrite`), or the user fixes one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Choice<T> {
+    Auto,
+    Fixed(T),
+}
+
+impl<T: fmt::Display> fmt::Display for Choice<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Auto => f.write_str("auto"),
+            Self::Fixed(value) => value.fmt(f),
+        }
+    }
+}
+
+impl<T: FromStr<Err = String>> FromStr for Choice<T> {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, String> {
+        match text {
+            "auto" => Ok(Self::Auto),
+            other => other
+                .parse()
+                .map(Self::Fixed)
+                .map_err(|reason| reason.replacen("(expected ", "(expected auto, ", 1)),
+        }
+    }
+}
+
 /// A Whisper model size, as published by whisper.cpp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelSize {
@@ -60,7 +91,7 @@ pub enum Style {
 }
 
 impl ModelSize {
-    const ALL: [Self; 5] = [
+    pub const ALL: [Self; 5] = [
         Self::Tiny,
         Self::Base,
         Self::Small,
@@ -222,6 +253,24 @@ mod tests {
                     "{error}"
                 );
             });
+    }
+
+    #[test]
+    fn choices_are_auto_or_a_fixed_value() {
+        assert_eq!("auto".parse(), Ok(Choice::<RewriteModel>::Auto));
+        assert_eq!(
+            "qwen3-1.7b".parse(),
+            Ok(Choice::Fixed(RewriteModel::Qwen3_1_7B))
+        );
+        assert_eq!(Choice::<RewriteModel>::Auto.to_string(), "auto");
+        assert_eq!(
+            Choice::Fixed(RewriteModel::Gemma3_4B).to_string(),
+            "gemma3-4b"
+        );
+        assert!("big"
+            .parse::<Choice<RewriteModel>>()
+            .unwrap_err()
+            .ends_with("(expected auto, qwen3-4b, gemma3-4b, or qwen3-1.7b)"));
     }
 
     #[test]

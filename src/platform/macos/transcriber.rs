@@ -1,7 +1,7 @@
 //! Local speech-to-text with whisper.cpp. Audio never leaves the machine.
 
 use crate::audio;
-use crate::config::{Dictation, WhisperModel};
+use crate::config::{Language, WhisperModel};
 use crate::facade::{Audio, FacadeError, Result};
 use crate::models::{self, Model};
 use crate::transcript;
@@ -23,12 +23,11 @@ pub struct Transcriber {
 }
 
 impl Transcriber {
-    pub fn new(dictation: &Dictation) -> Self {
+    pub fn new(model: WhisperModel, language: &Language) -> Self {
         Self {
-            model: dictation.model,
-            path: models::default_path(Model::Whisper(dictation.model)),
-            language: models::whisper_language(dictation.model, &dictation.language)
-                .map(str::to_owned),
+            model,
+            path: models::default_path(Model::Whisper(model)),
+            language: models::whisper_language(model, language).map(str::to_owned),
             context: None,
             loading: None,
         }
@@ -118,9 +117,16 @@ fn transcription(error: impl std::fmt::Display) -> FacadeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
-    use crate::platform::Os;
+    use crate::config::ModelSize;
     use std::process::Command;
+
+    fn transcriber() -> Transcriber {
+        let base_en = WhisperModel {
+            size: ModelSize::Base,
+            english_only: true,
+        };
+        Transcriber::new(base_en, &Language::Auto)
+    }
 
     /// Speaks a sentence with `say`, converts it to 16 kHz mono float WAV, and returns
     /// the samples. Uses only built-in macOS tools.
@@ -156,7 +162,7 @@ mod tests {
     #[test]
     #[ignore = "needs the speech model downloaded"]
     fn transcribes_spoken_english() {
-        let mut transcriber = Transcriber::new(&Config::defaults(Os::MacOs).dictation);
+        let mut transcriber = transcriber();
         transcriber.preload().unwrap();
         let audio = Audio {
             samples: spoken("Please send the report by Friday."),
@@ -170,7 +176,7 @@ mod tests {
 
     #[test]
     fn short_audio_is_not_transcribed() {
-        let mut transcriber = Transcriber::new(&Config::defaults(Os::MacOs).dictation);
+        let mut transcriber = transcriber();
         let audio = Audio {
             samples: vec![0.0; 100],
             sample_rate: audio::WHISPER_SAMPLE_RATE,

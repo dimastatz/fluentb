@@ -239,7 +239,7 @@ mod tests {
     use super::*;
     use crate::accelerator::{Key, Modifier};
     use crate::config::{
-        DictationMode, Language, ModelSize, RewriteModel, Style, WhisperModel, DEFAULT_FILE,
+        Choice, DictationMode, Language, ModelSize, RewriteModel, Style, WhisperModel, DEFAULT_FILE,
     };
 
     fn parse_mac(text: &str) -> (Config, Warnings) {
@@ -301,10 +301,10 @@ mod tests {
         assert_eq!(
             config.dictation,
             Dictation {
-                model: WhisperModel {
+                model: Choice::Fixed(WhisperModel {
                     size: ModelSize::Small,
                     english_only: false
-                },
+                }),
                 language: Language::Code("he".into()),
                 mode: DictationMode::PushToTalk,
             }
@@ -313,7 +313,7 @@ mod tests {
             config.rewrite,
             Rewrite {
                 style: Style::Concise,
-                model: RewriteModel::Gemma3_4B,
+                model: Choice::Fixed(RewriteModel::Gemma3_4B),
                 keep_loaded: true,
                 unload_after_minutes: 30,
                 max_characters: 8000,
@@ -396,7 +396,7 @@ mod tests {
                 ),
                 invalid(
                     "rewrite.model",
-                    "unknown rewrite model \"qwen2.5-3b\" (expected qwen3-4b, gemma3-4b, or qwen3-1.7b)"
+                    "unknown rewrite model \"qwen2.5-3b\" (expected auto, qwen3-4b, gemma3-4b, or qwen3-1.7b)"
                 ),
                 invalid("rewrite.keep_loaded", "expected true or false"),
                 invalid(

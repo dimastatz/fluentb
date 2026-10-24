@@ -4,10 +4,12 @@
 //! an [`Event`] and is fed straight into [`next`] before the next input is read.
 
 use super::effect::Effect;
+use super::models::{self, HotkeyLabels, Models};
 use super::state::{Event, State};
 use super::transition::next;
 use crate::config::{Config, ConfigWarning};
-use crate::facade::{Facade, Result};
+use crate::facade::{Facade, InputEvent, Result};
+use crate::platform::Os;
 
 /// What running one effect led to.
 enum Outcome {
@@ -17,21 +19,53 @@ enum Outcome {
 }
 
 /// Registers the configured hotkeys, reports any config problems, and processes input
-/// until the user quits.
+/// until the user quits. `models` is the status of each model at startup; changes
+/// arrive later as [`InputEvent::ModelChanged`].
 ///
 /// Returns an error only if the hotkeys can't be registered or input can't be read;
 /// every other failure is reported to the user and the app keeps running.
-pub fn run_app(facade: &mut dyn Facade, config: &Config, warnings: &[ConfigWarning]) -> Result<()> {
+pub fn run_app(
+    facade: &mut dyn Facade,
+    config: &Config,
+    warnings: &[ConfigWarning],
+    models: Models,
+) -> Result<()> {
     facade.register_hotkeys(&config.bindings())?;
     if !warnings.is_empty() {
         perform(Effect::Notify(config_notice(warnings)), facade);
     }
-    let mut state = Some(State::Idle);
-    while let Some(current) = state {
+    let labels = HotkeyLabels {
+        dictate: config.hotkeys.dictate.display(Os::current()),
+        rewrite: config.hotkeys.rewrite.display(Os::current()),
+    };
+    let mut current = Some((State::Idle, models));
+    while let Some((state, models)) = current {
         let event = Event::Input(facade.next_event()?);
-        state = dispatch(current, event, facade);
+        current = handle(state, models, event, &labels, facade);
     }
     Ok(())
+}
+
+/// Applies one input event, keeping track of model status and holding back hotkeys
+/// whose model isn't ready. Returns `None` if the app should exit.
+fn handle(
+    state: State,
+    models: Models,
+    event: Event,
+    labels: &HotkeyLabels,
+    facade: &mut dyn Facade,
+) -> Option<(State, Models)> {
+    if let Event::Input(InputEvent::ModelChanged(kind, status)) = event {
+        if let Some(message) = models::announce(kind, models.get(kind), &status, labels) {
+            perform(Effect::Notify(message), facade);
+        }
+        return Some((state, models.with(kind, status)));
+    }
+    if let Some(message) = models.blocked(state, &event) {
+        perform(Effect::Notify(message), facade);
+        return Some((state, models));
+    }
+    dispatch(state, event, facade).map(|state| (state, models))
 }
 
 /// Applies `event` and every follow-up event it causes, returning the settled state,
@@ -116,7 +150,8 @@ fn perform(effect: Effect, facade: &mut dyn Facade) -> Outcome {
 mod tests {
     use super::*;
     use crate::app::transition::{COPIED, EMPTY_REWRITE, NO_SELECTION};
-    use crate::facade::{FacadeError, Hotkey, InputEvent, TrayStatus};
+    use crate::facade::{FacadeError, Hotkey, ModelStatus, TrayStatus};
+    use crate::models::Kind;
     use crate::platform::Os;
     use crate::testing::{Call, FakeFacade};
 
@@ -129,7 +164,46 @@ mod tests {
     }
 
     fn run(facade: &mut FakeFacade) {
-        assert_eq!(run_app(facade, &config(), &[]), Ok(()));
+        assert_eq!(run_app(facade, &config(), &[], Models::ready()), Ok(()));
+    }
+
+    #[test]
+    fn dictation_waits_for_the_speech_model() {
+        let ready = InputEvent::ModelChanged(Kind::Speech, ModelStatus::Ready);
+        let mut facade = FakeFacade::with_events([DICTATE, ready, DICTATE, DICTATE, QUIT]);
+        let models = Models {
+            speech: ModelStatus::Downloading { percent: 42 },
+            rewrite: ModelStatus::Downloading { percent: 0 },
+        };
+
+        assert_eq!(run_app(&mut facade, &config(), &[], models), Ok(()));
+
+        assert_eq!(facade.inserted, ["hello world"]);
+        assert_eq!(
+            facade.notifications,
+            [
+                "The speech model is still downloading (42%). Dictation will work as soon as it's ready.",
+                "Dictation is ready: press ⇧⌘D, speak, then press it again.",
+            ]
+        );
+    }
+
+    #[test]
+    fn model_progress_is_tracked_quietly() {
+        let progress =
+            InputEvent::ModelChanged(Kind::Rewrite, ModelStatus::Downloading { percent: 60 });
+        let mut facade = FakeFacade {
+            selection: Some("draft".into()),
+            ..FakeFacade::with_events([progress, REWRITE, QUIT])
+        };
+
+        run(&mut facade);
+
+        assert!(facade.inserted.is_empty());
+        assert_eq!(
+            facade.notifications,
+            ["The rewrite model is still downloading (60%). Rewrite will work as soon as it's ready."]
+        );
     }
 
     #[test]
@@ -297,7 +371,7 @@ mod tests {
         };
 
         assert_eq!(
-            run_app(&mut facade, &config(), &[]),
+            run_app(&mut facade, &config(), &[], Models::ready()),
             Err(Call::RegisterHotkeys.error())
         );
     }
@@ -307,7 +381,7 @@ mod tests {
         let mut facade = FakeFacade::with_events([DICTATE]);
 
         assert_eq!(
-            run_app(&mut facade, &config(), &[]),
+            run_app(&mut facade, &config(), &[], Models::ready()),
             Err(FacadeError::Hotkeys("no more events".into()))
         );
     }
@@ -320,7 +394,10 @@ mod tests {
             ConfigWarning::HotkeyConflict,
         ];
 
-        assert_eq!(run_app(&mut facade, &config(), &warnings), Ok(()));
+        assert_eq!(
+            run_app(&mut facade, &config(), &warnings, Models::ready()),
+            Ok(())
+        );
 
         assert_eq!(
             facade.notifications,
@@ -336,7 +413,7 @@ mod tests {
         let (config, _) = crate::config::parse("[hotkeys]\ndictate = \"Alt+Space\"\n", Os::Linux);
         let mut facade = FakeFacade::with_events([QUIT]);
 
-        assert_eq!(run_app(&mut facade, &config, &[]), Ok(()));
+        assert_eq!(run_app(&mut facade, &config, &[], Models::ready()), Ok(()));
 
         assert_eq!(facade.bindings, config.bindings());
         assert!(facade.notifications.is_empty());

@@ -18,8 +18,9 @@ dictate = "Cmd+Shift+D"
 rewrite = "Cmd+Shift+R"
 
 [dictation]
-# tiny, base, small, medium (add .en for English only), or large-v3.
-model = "base.en"
+# auto (base.en on English systems, base otherwise), tiny, base, small, medium
+# (add .en for English only), or large-v3.
+model = "auto"
 # "auto" or a two-letter language code such as "en", "he", or "de".
 language = "auto"
 # toggle: press to start and again to stop. push-to-talk: hold while speaking.
@@ -28,8 +29,9 @@ mode = "toggle"
 [rewrite]
 # neutral, casual, formal, or concise.
 style = "neutral"
-# The local model that rewrites text: qwen3-4b, gemma3-4b, or qwen3-1.7b (lighter).
-model = "qwen3-4b"
+# The local model that rewrites text: auto (qwen3-4b, or qwen3-1.7b on Macs with
+# less than 16 GB of memory), qwen3-4b, gemma3-4b, or qwen3-1.7b.
+model = "auto"
 # The model is unloaded after this many idle minutes, to free memory.
 unload_after_minutes = 10
 # Set to true to keep the model in memory for instant rewrites.

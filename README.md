@@ -43,12 +43,16 @@ Everything runs on your machine:
 
 - **Transcription** uses [Whisper](https://github.com/openai/whisper) through [whisper.cpp](https://github.com/ggerganov/whisper.cpp).
 - **Rewrite** uses a local language model through [llama.cpp](https://github.com/ggerganov/llama.cpp).
-- Your audio and text are never sent anywhere. The only network traffic is the one-time model download on first run and an optional update check.
+- Your audio and text are never sent anywhere. The only network traffic is downloading the models on first run (or when you switch models) and an optional update check. Downloads are plain requests to Hugging Face and send nothing about you:
+  - Speech: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-<model>.bin`
+  - Rewrite: `https://huggingface.co/Qwen/Qwen3-4B-GGUF/…`, `ggml-org/gemma-3-4b-it-GGUF/…` and `unsloth/Qwen3-1.7B-GGUF/…`
+
+  Each file is checked against its published SHA-256 before use. The full list is in [`src/models.rs`](src/models.rs).
 - Logs record events and timings only, never what you said or wrote.
 
 ## Project status
 
-fluentb is in **early development**. On macOS, fluentb runs in the menu bar, and both hotkeys work: dictation types what you say into the focused app, and rewrite replaces the selected text with a polished version from a local model. Automatic model downloads (M6) are next.
+fluentb is in **early development**. On macOS, it runs in the menu bar, downloads its models on first run, and both hotkeys work. Dictation types what you say into the focused app, and rewrite replaces the selected text with a polished version from a local model. Polish (M7) and a signed app (M8) are next.
 
 | Platform | Status    |
 | -------- | --------- |
@@ -72,28 +76,26 @@ cd fluentb
 cargo build --release
 ```
 
-### Try dictation
+### Try it
 
-1. Download the speech model (about 142 MB). Until M6 adds automatic downloads, it goes here:
+1. Run fluentb from a terminal: `cargo run --release`.
+2. On first run, fluentb:
+   - shows a welcome notification;
+   - asks for **Microphone** and **Accessibility** access (allow both for your terminal app; Accessibility is needed to read and type text in other apps);
+   - downloads its models in the background: the speech model (about 150 MB) first, then the rewrite model (about 2.5 GB, or 1.1 GB on Macs with less than 16 GB of memory).
 
-   ```sh
-   mkdir -p ~/Library/Application\ Support/fluentb/models
-   curl -L -o ~/Library/Application\ Support/fluentb/models/ggml-base.en.bin \
-     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
-   ```
+   The menu shows the progress, and a notification says when each hotkey is ready.
+3. **Dictate:** click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
+4. **Rewrite:** select some text in any app and press `⌘⇧R`.
 
-2. Run fluentb from a terminal: `cargo run --release`.
-3. Allow your terminal app **Microphone** and **Accessibility** access in System Settings → Privacy & Security when macOS asks. Accessibility is needed to type into other apps.
-4. Click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
+fluentb shows a microphone in the menu bar: an outline when idle, red while recording, and three dots while transcribing. Its menu:
+- lists your hotkeys;
+- switches the speech and rewrite models (downloading them if needed);
+- removes models you no longer use;
+- warns about missing permissions;
+- opens the config, and quits the app.
 
-To try rewrite, download the rewrite model (about 2.5 GB) to the same folder, then select some text in any app and press `⌘⇧R`:
-
-```sh
-curl -L -o ~/Library/Application\ Support/fluentb/models/Qwen3-4B-Q4_K_M.gguf \
-  https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
-```
-
-fluentb shows a microphone in the menu bar: an outline when idle, red while recording, and three dots while transcribing. Its menu lists your hotkeys, opens the config, and quits the app. Only one copy runs at a time.
+Only one copy runs at a time.
 
 ### Run the checks
 
@@ -115,14 +117,12 @@ CI also checks that the crate builds with the minimum supported Rust version (1.
 
 ## Usage
 
-> These hotkeys are the planned defaults. The app can't be installed or run yet.
-
 | Action  | Default hotkey | What it does                                              |
 | ------- | -------------- | --------------------------------------------------------- |
 | Dictate | `⌘⇧D`          | Press to start recording, press again to insert the text. |
 | Rewrite | `⌘⇧R`          | Rewrites the selected text and replaces it.               |
 
-On first launch, fluentb downloads the speech and rewrite models and asks for **Microphone** and **Accessibility** permissions. Accessibility access is needed to insert text into other apps.
+On first launch, fluentb downloads the speech and rewrite models and asks for **Microphone** and **Accessibility** permissions. Accessibility access is needed to read and insert text in other apps. Dictation works as soon as the speech model is ready; you don't have to wait for the rewrite model.
 
 Settings live in `config.toml`, which fluentb creates with comments on first run:
 
@@ -141,13 +141,13 @@ dictate = "Cmd+Shift+D"
 rewrite = "Cmd+Shift+R"
 
 [dictation]
-model = "base.en"     # tiny, base, small, medium (optionally .en), or large-v3
+model = "auto"        # base.en on English systems, base otherwise; or tiny, small, medium (optionally .en), large-v3
 language = "auto"     # or a two-letter code such as "en" or "he"
 mode = "toggle"       # or "push-to-talk"
 
 [rewrite]
 style = "neutral"     # neutral, casual, formal, or concise
-model = "qwen3-4b"    # qwen3-4b, gemma3-4b, or qwen3-1.7b (lighter)
+model = "auto"        # qwen3-4b, or qwen3-1.7b under 16 GB of memory; or gemma3-4b
 unload_after_minutes = 10  # free the model's memory when idle
 keep_loaded = false
 max_characters = 4000

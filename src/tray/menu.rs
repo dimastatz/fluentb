@@ -1,7 +1,9 @@
-//! The tray menu, built from the config and the current status.
+//! The tray menu, built from the config and what the app is doing.
 
 use crate::config::Config;
-use crate::facade::{Hotkey, TrayStatus};
+use crate::download::format_size;
+use crate::facade::{Hotkey, Permission, TrayStatus};
+use crate::models::{self, Kind, Model};
 use crate::platform::Os;
 
 /// What a clickable menu entry does.
@@ -9,28 +11,51 @@ use crate::platform::Os;
 pub enum MenuAction {
     OpenConfig,
     Quit,
+    /// Switch to this model, downloading it if needed.
+    SelectModel(Model),
+    RemoveUnusedModels,
+    /// Open System Settings where this permission is granted.
+    FixPermission(Permission),
 }
 
 impl MenuAction {
-    const ALL: [Self; 2] = [Self::OpenConfig, Self::Quit];
-
     /// The id the platform menu reports when the entry is chosen.
     #[must_use]
-    pub const fn id(self) -> &'static str {
+    pub fn id(self) -> String {
         match self {
-            Self::OpenConfig => "open-config",
-            Self::Quit => "quit",
+            Self::OpenConfig => "open-config".into(),
+            Self::Quit => "quit".into(),
+            Self::SelectModel(model) => format!("model:{}", model.id()),
+            Self::RemoveUnusedModels => "remove-unused-models".into(),
+            Self::FixPermission(Permission::Microphone) => "fix:microphone".into(),
+            Self::FixPermission(Permission::Accessibility) => "fix:accessibility".into(),
         }
     }
 
     /// The action for a menu id, or `None` for ids fluentb didn't create.
     #[must_use]
     pub fn from_id(id: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|action| action.id() == id)
+        let model = |name: &str| {
+            models::REGISTRY
+                .iter()
+                .map(|entry| entry.model)
+                .find(|model| model.id() == name)
+        };
+        match id {
+            "open-config" => Some(Self::OpenConfig),
+            "quit" => Some(Self::Quit),
+            "remove-unused-models" => Some(Self::RemoveUnusedModels),
+            "fix:microphone" => Some(Self::FixPermission(Permission::Microphone)),
+            "fix:accessibility" => Some(Self::FixPermission(Permission::Accessibility)),
+            other => other
+                .strip_prefix("model:")
+                .and_then(model)
+                .map(Self::SelectModel),
+        }
     }
 }
 
-/// One entry below the status line.
+/// One menu entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuEntry {
     /// Informational text, shown disabled.
@@ -39,26 +64,67 @@ pub enum MenuEntry {
         action: MenuAction,
         title: String,
     },
+    /// An action shown with a check mark when `checked`.
+    Choice {
+        action: MenuAction,
+        title: String,
+        checked: bool,
+    },
+    Submenu {
+        title: String,
+        entries: Vec<MenuEntry>,
+    },
     Separator,
 }
 
-/// The whole menu: a status line that changes with the state, then fixed entries.
+/// The whole menu: a status line that changes often, then the other entries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MenuModel {
     pub status: String,
     pub entries: Vec<MenuEntry>,
 }
 
-/// Builds the menu for `status` with the hotkeys from `config`, written the way `os`
+/// Everything besides the config that shapes the menu.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MenuState {
+    pub status: TrayStatus,
+    /// The model download in progress and its percentage.
+    pub download: Option<(Kind, u8)>,
+    pub speech: Model,
+    pub rewrite: Model,
+    /// Permissions the user hasn't granted.
+    pub missing: Vec<Permission>,
+}
+
+/// Builds the menu for `state`, with the hotkeys from `config` written the way `os`
 /// shows them.
 #[must_use]
-pub fn menu_model(config: &Config, status: TrayStatus, os: Os) -> MenuModel {
+pub fn menu_model(config: &Config, state: &MenuState, os: Os) -> MenuModel {
+    let warnings = state.missing.iter().map(|permission| MenuEntry::Action {
+        action: MenuAction::FixPermission(*permission),
+        title: format!("⚠ {} not granted — Fix…", permission_name(*permission)),
+    });
     let hotkeys = config.bindings().into_iter().map(|binding| {
         MenuEntry::Label(format!(
             "{}: {}",
             hotkey_name(binding.hotkey),
             binding.accelerator.display(os)
         ))
+    });
+    let model_menus = [
+        ("Speech model", Kind::Speech, state.speech),
+        ("Rewrite model", Kind::Rewrite, state.rewrite),
+    ]
+    .into_iter()
+    .map(|(title, kind, current)| MenuEntry::Submenu {
+        title: title.to_owned(),
+        entries: models::of_kind(kind)
+            .map(|model| MenuEntry::Choice {
+                action: MenuAction::SelectModel(model),
+                title: model_title(model),
+                checked: model == current,
+            })
+            .collect(),
     });
     let actions = [
         (MenuAction::OpenConfig, "Open config…"),
@@ -70,16 +136,39 @@ pub fn menu_model(config: &Config, status: TrayStatus, os: Os) -> MenuModel {
         title: title.to_owned(),
     });
     MenuModel {
-        status: status_label(status).to_owned(),
-        entries: std::iter::once(MenuEntry::Separator)
+        status: status_line(state.status, state.download),
+        entries: warnings
+            .chain([MenuEntry::Separator])
             .chain(hotkeys)
             .chain([MenuEntry::Separator])
+            .chain(model_menus)
+            .chain([
+                MenuEntry::Action {
+                    action: MenuAction::RemoveUnusedModels,
+                    title: "Remove unused models".into(),
+                },
+                MenuEntry::Separator,
+            ])
             .chain(actions)
             .collect(),
     }
 }
 
-/// The status line text.
+/// The status line: what the app is doing, or the download in progress while idle.
+#[must_use]
+pub fn status_line(status: TrayStatus, download: Option<(Kind, u8)>) -> String {
+    match (status, download) {
+        (TrayStatus::Idle, Some((Kind::Speech, percent))) => {
+            format!("Downloading speech model… {percent}%")
+        }
+        (TrayStatus::Idle, Some((Kind::Rewrite, percent))) => {
+            format!("Downloading rewrite model… {percent}%")
+        }
+        (status, _) => status_label(status).to_owned(),
+    }
+}
+
+/// The status text.
 #[must_use]
 pub const fn status_label(status: TrayStatus) -> &'static str {
     match status {
@@ -97,6 +186,20 @@ pub fn tooltip(status: TrayStatus) -> String {
     format!("fluentb: {}", status_label(status))
 }
 
+fn model_title(model: Model) -> String {
+    let size = models::entry(model).map_or_else(String::new, |entry| {
+        format!(" ({})", format_size(entry.size))
+    });
+    format!("{}{size}", model.id())
+}
+
+const fn permission_name(permission: Permission) -> &'static str {
+    match permission {
+        Permission::Microphone => "Microphone access",
+        Permission::Accessibility => "Accessibility access",
+    }
+}
+
 const fn hotkey_name(hotkey: Hotkey) -> &'static str {
     match hotkey {
         Hotkey::Dictate => "Dictate",
@@ -107,6 +210,23 @@ const fn hotkey_name(hotkey: Hotkey) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{ModelSize, RewriteModel, WhisperModel};
+
+    const BASE_EN: Model = Model::Whisper(WhisperModel {
+        size: ModelSize::Base,
+        english_only: true,
+    });
+    const QWEN: Model = Model::Rewrite(RewriteModel::Qwen3_4B);
+
+    fn state() -> MenuState {
+        MenuState {
+            status: TrayStatus::Idle,
+            download: None,
+            speech: BASE_EN,
+            rewrite: QWEN,
+            missing: Vec::new(),
+        }
+    }
 
     fn label(text: &str) -> MenuEntry {
         MenuEntry::Label(text.into())
@@ -119,41 +239,122 @@ mod tests {
         }
     }
 
+    fn submenu<'a>(menu: &'a MenuModel, title: &str) -> &'a [MenuEntry] {
+        menu.entries
+            .iter()
+            .find_map(|entry| match entry {
+                MenuEntry::Submenu { title: t, entries } if t == title => Some(entries.as_slice()),
+                _ => None,
+            })
+            .unwrap()
+    }
+
     #[test]
-    fn builds_the_menu_from_config_and_status() {
-        let menu = menu_model(
-            &Config::defaults(Os::MacOs),
-            TrayStatus::Recording,
-            Os::MacOs,
+    fn builds_the_menu_from_config_and_state() {
+        let menu = menu_model(&Config::defaults(Os::MacOs), &state(), Os::MacOs);
+
+        assert_eq!(menu.status, "Idle");
+        let flat: Vec<&MenuEntry> = menu
+            .entries
+            .iter()
+            .filter(|entry| !matches!(entry, MenuEntry::Submenu { .. }))
+            .collect();
+        assert_eq!(
+            flat,
+            [
+                &MenuEntry::Separator,
+                &label("Dictate: ⇧⌘D"),
+                &label("Rewrite: ⇧⌘R"),
+                &MenuEntry::Separator,
+                &action(MenuAction::RemoveUnusedModels, "Remove unused models"),
+                &MenuEntry::Separator,
+                &action(MenuAction::OpenConfig, "Open config…"),
+                &action(MenuAction::Quit, "Quit fluentb"),
+            ]
         );
+    }
+
+    #[test]
+    fn model_submenus_check_the_current_models() {
+        let menu = menu_model(&Config::defaults(Os::MacOs), &state(), Os::MacOs);
+
+        let speech = submenu(&menu, "Speech model");
+        assert_eq!(speech.len(), 9);
+        assert!(speech.contains(&MenuEntry::Choice {
+            action: MenuAction::SelectModel(BASE_EN),
+            title: "base.en (148 MB)".into(),
+            checked: true,
+        }));
+        let rewrite = submenu(&menu, "Rewrite model");
+        assert_eq!(
+            rewrite,
+            [
+                MenuEntry::Choice {
+                    action: MenuAction::SelectModel(QWEN),
+                    title: "qwen3-4b (2.5 GB)".into(),
+                    checked: true,
+                },
+                MenuEntry::Choice {
+                    action: MenuAction::SelectModel(Model::Rewrite(RewriteModel::Gemma3_4B)),
+                    title: "gemma3-4b (2.5 GB)".into(),
+                    checked: false,
+                },
+                MenuEntry::Choice {
+                    action: MenuAction::SelectModel(Model::Rewrite(RewriteModel::Qwen3_1_7B)),
+                    title: "qwen3-1.7b (1.1 GB)".into(),
+                    checked: false,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_permissions_come_first() {
+        let state = MenuState {
+            missing: vec![Permission::Accessibility, Permission::Microphone],
+            ..state()
+        };
+
+        let menu = menu_model(&Config::defaults(Os::MacOs), &state, Os::MacOs);
 
         assert_eq!(
-            menu,
-            MenuModel {
-                status: "Recording…".into(),
-                entries: vec![
-                    MenuEntry::Separator,
-                    label("Dictate: ⇧⌘D"),
-                    label("Rewrite: ⇧⌘R"),
-                    MenuEntry::Separator,
-                    action(MenuAction::OpenConfig, "Open config…"),
-                    action(MenuAction::Quit, "Quit fluentb"),
-                ],
-            }
+            menu.entries[..2],
+            [
+                action(
+                    MenuAction::FixPermission(Permission::Accessibility),
+                    "⚠ Accessibility access not granted — Fix…"
+                ),
+                action(
+                    MenuAction::FixPermission(Permission::Microphone),
+                    "⚠ Microphone access not granted — Fix…"
+                ),
+            ]
         );
     }
 
     #[test]
     fn shows_hotkeys_the_way_the_os_writes_them() {
-        let menu = menu_model(
-            &Config::defaults(Os::Windows),
-            TrayStatus::Idle,
-            Os::Windows,
-        );
+        let menu = menu_model(&Config::defaults(Os::Windows), &state(), Os::Windows);
 
-        assert_eq!(menu.status, "Idle");
         assert_eq!(menu.entries[1], label("Dictate: Ctrl+Shift+D"));
         assert_eq!(menu.entries[2], label("Rewrite: Ctrl+Shift+R"));
+    }
+
+    #[test]
+    fn status_line_shows_downloads_while_idle() {
+        assert_eq!(
+            status_line(TrayStatus::Idle, Some((Kind::Speech, 42))),
+            "Downloading speech model… 42%"
+        );
+        assert_eq!(
+            status_line(TrayStatus::Idle, Some((Kind::Rewrite, 7))),
+            "Downloading rewrite model… 7%"
+        );
+        assert_eq!(
+            status_line(TrayStatus::Recording, Some((Kind::Rewrite, 7))),
+            "Recording…"
+        );
+        assert_eq!(status_line(TrayStatus::Idle, None), "Idle");
     }
 
     #[test]
@@ -174,9 +375,24 @@ mod tests {
 
     #[test]
     fn menu_ids_round_trip() {
-        MenuAction::ALL
+        let actions = [
+            MenuAction::OpenConfig,
+            MenuAction::Quit,
+            MenuAction::RemoveUnusedModels,
+            MenuAction::FixPermission(Permission::Microphone),
+            MenuAction::FixPermission(Permission::Accessibility),
+        ]
+        .into_iter()
+        .chain(
+            models::REGISTRY
+                .iter()
+                .map(|entry| MenuAction::SelectModel(entry.model)),
+        );
+
+        actions.for_each(|action| assert_eq!(MenuAction::from_id(&action.id()), Some(action)));
+        assert_eq!(MenuAction::SelectModel(BASE_EN).id(), "model:base.en");
+        ["about", "model:huge", "model:", "fix:camera"]
             .iter()
-            .for_each(|action| assert_eq!(MenuAction::from_id(action.id()), Some(*action)));
-        assert_eq!(MenuAction::from_id("about"), None);
+            .for_each(|id| assert_eq!(MenuAction::from_id(id), None, "{id}"));
     }
 }
