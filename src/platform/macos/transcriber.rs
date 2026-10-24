@@ -3,7 +3,8 @@
 use crate::audio;
 use crate::config::{Dictation, WhisperModel};
 use crate::facade::{Audio, FacadeError, Result};
-use crate::{models, transcript};
+use crate::models::{self, Model};
+use crate::transcript;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
@@ -25,7 +26,7 @@ impl Transcriber {
     pub fn new(dictation: &Dictation) -> Self {
         Self {
             model: dictation.model,
-            path: models::default_path(dictation.model),
+            path: models::default_path(Model::Whisper(dictation.model)),
             language: models::whisper_language(dictation.model, &dictation.language)
                 .map(str::to_owned),
             context: None,
@@ -95,7 +96,7 @@ fn model_file(path: Option<&Path>, model: WhisperModel) -> Result<&Path> {
         Err(FacadeError::Transcription(format!(
             "speech model not found at {}. Download it from {} and save it there",
             path.display(),
-            models::download_url(model)
+            Model::Whisper(model).download_url()
         )))
     }
 }

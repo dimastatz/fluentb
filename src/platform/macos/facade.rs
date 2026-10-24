@@ -1,20 +1,19 @@
 //! [`Facade`] for macOS, built from the other modules in this directory.
 
 use super::recorder::Recording;
+use super::rewriter::Rewriter;
 use super::transcriber::Transcriber;
-use super::{insert, notify, permissions, MainRequest};
+use super::{insert, notify, permissions, selection, MainRequest};
 use crate::config::Config;
 use crate::facade::{
-    Audio, Facade, FacadeError, Hotkey, HotkeyBinding, InputEvent, Result, TrayStatus,
+    Audio, Facade, FacadeError, Hotkey, HotkeyBinding, InputEvent, Replacement, Result, TrayStatus,
 };
-use crate::platform::bridge::{self, Route, Signal};
+use crate::platform::bridge::{self, Route, Signal, Wait};
 use crate::platform::keymap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc;
 use tao::event_loop::EventLoopProxy;
-
-const REWRITE_UNAVAILABLE: &str = "isn't available yet; it arrives in a later version";
 
 pub struct MacFacade {
     proxy: EventLoopProxy<MainRequest>,
@@ -25,6 +24,7 @@ pub struct MacFacade {
     hotkeys: Vec<(u32, Hotkey)>,
     recording: Option<Recording>,
     transcriber: Transcriber,
+    rewriter: Rewriter,
 }
 
 impl MacFacade {
@@ -41,6 +41,7 @@ impl MacFacade {
             hotkeys: Vec::new(),
             recording: None,
             transcriber: Transcriber::new(&config.dictation),
+            rewriter: Rewriter::new(&config.rewrite),
         }
     }
 
@@ -81,15 +82,18 @@ impl Facade for MacFacade {
     }
 
     fn next_event(&mut self) -> Result<InputEvent> {
-        std::iter::from_fn(|| bridge::next_route(&self.signals, &self.hotkeys))
-            .find_map(|route| match route {
-                Route::Input(event) => Some(event),
-                Route::OpenConfig => {
-                    open_config(self.config_path.as_deref());
-                    None
+        // Waits for input, waking up to unload the rewrite model once it goes idle.
+        loop {
+            let deadline = self.rewriter.time_until_unload();
+            match bridge::next_route_within(&self.signals, &self.hotkeys, deadline) {
+                Wait::Route(Route::Input(event)) => return Ok(event),
+                Wait::Route(Route::OpenConfig) => open_config(self.config_path.as_deref()),
+                Wait::TimedOut => self.rewriter.unload_if_idle(),
+                Wait::Closed => {
+                    return Err(FacadeError::Hotkeys("the event listener stopped".into()))
                 }
-            })
-            .ok_or_else(|| FacadeError::Hotkeys("the event listener stopped".into()))
+            }
+        }
     }
 
     fn start_recording(&mut self) -> Result<()> {
@@ -110,15 +114,23 @@ impl Facade for MacFacade {
     }
 
     fn selected_text(&mut self) -> Result<Option<String>> {
-        Err(FacadeError::Rewrite(format!(
-            "Rewrite {REWRITE_UNAVAILABLE}"
-        )))
+        permissions::check_accessibility()?;
+        selection::read()
     }
 
-    fn rewrite(&mut self, _text: &str) -> Result<String> {
-        Err(FacadeError::Rewrite(format!(
-            "Rewrite {REWRITE_UNAVAILABLE}"
-        )))
+    fn rewrite(&mut self, text: &str) -> Result<String> {
+        self.rewriter.rewrite(text)
+    }
+
+    fn replace_selection(&mut self, original: &str, replacement: &str) -> Result<Replacement> {
+        permissions::check_accessibility()?;
+        if selection::read()?.as_deref() == Some(original) {
+            insert::paste(replacement)?;
+            Ok(Replacement::Replaced)
+        } else {
+            insert::copy(replacement)?;
+            Ok(Replacement::Copied)
+        }
     }
 
     fn insert_text(&mut self, text: &str) -> Result<()> {

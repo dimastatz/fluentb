@@ -11,7 +11,13 @@ const SUPPORTED_VERSION: i64 = 1;
 const TOP_LEVEL_KEYS: [&str; 4] = ["version", "hotkeys", "dictation", "rewrite"];
 const HOTKEY_KEYS: [&str; 2] = ["dictate", "rewrite"];
 const DICTATION_KEYS: [&str; 3] = ["model", "language", "mode"];
-const REWRITE_KEYS: [&str; 1] = ["style"];
+const REWRITE_KEYS: [&str; 5] = [
+    "style",
+    "model",
+    "keep_loaded",
+    "unload_after_minutes",
+    "max_characters",
+];
 
 /// Parses config file text. Never fails: a syntax error yields all defaults, and an
 /// invalid or missing value yields that value's default. Every problem comes back as
@@ -67,12 +73,7 @@ fn from_table(root: &Table, defaults: Config, os: Os) -> (Config, Warnings) {
         defaults.dictation.mode,
         str::parse,
     );
-    let (style, style_warnings) = field(
-        rewrite_table,
-        "rewrite.style",
-        defaults.rewrite.style,
-        str::parse,
-    );
+    let (rewrite, rewrite_settings_warnings) = rewrite_settings(rewrite_table, defaults.rewrite);
 
     let config = Config {
         hotkeys,
@@ -81,7 +82,7 @@ fn from_table(root: &Table, defaults: Config, os: Os) -> (Config, Warnings) {
             language,
             mode,
         },
-        rewrite: Rewrite { style },
+        rewrite,
     };
     let warnings = [
         unknown_keys(root, None, &TOP_LEVEL_KEYS),
@@ -95,10 +96,48 @@ fn from_table(root: &Table, defaults: Config, os: Os) -> (Config, Warnings) {
         language_warnings,
         mode_warnings,
         rewrite_section,
-        style_warnings,
+        rewrite_settings_warnings,
     ]
     .concat();
     (config, warnings)
+}
+
+/// Reads the `[rewrite]` settings.
+fn rewrite_settings(table: Option<&Table>, defaults: Rewrite) -> (Rewrite, Warnings) {
+    let (style, style_warnings) = field(table, "rewrite.style", defaults.style, str::parse);
+    let (rewrite_model, rewrite_model_warnings) =
+        field(table, "rewrite.model", defaults.model, str::parse);
+    let (keep_loaded, keep_loaded_warnings) =
+        value_field(table, "rewrite.keep_loaded", defaults.keep_loaded, boolean);
+    let (unload_after_minutes, unload_warnings) = value_field(
+        table,
+        "rewrite.unload_after_minutes",
+        defaults.unload_after_minutes,
+        |value| positive(value, 24 * 60),
+    );
+    let (max_characters, max_characters_warnings) = value_field(
+        table,
+        "rewrite.max_characters",
+        defaults.max_characters,
+        |value| positive(value, 100_000),
+    );
+
+    let rewrite = Rewrite {
+        style,
+        model: rewrite_model,
+        keep_loaded,
+        unload_after_minutes,
+        max_characters,
+    };
+    let warnings = [
+        style_warnings,
+        rewrite_model_warnings,
+        keep_loaded_warnings,
+        unload_warnings,
+        max_characters_warnings,
+    ]
+    .concat();
+    (rewrite, warnings)
 }
 
 /// Looks up a `[section]` table, warning if it isn't a table or has unknown keys.
@@ -138,14 +177,44 @@ fn field<T>(
     default: T,
     parse: impl Fn(&str) -> Result<T, String>,
 ) -> (T, Warnings) {
+    value_field(table, key, default, |value| match value {
+        Value::String(text) => parse(text),
+        _ => Err("expected a string".into()),
+    })
+}
+
+/// Reads one setting of any TOML type, falling back to `default` if it is absent or
+/// invalid.
+fn value_field<T>(
+    table: Option<&Table>,
+    key: &str,
+    default: T,
+    parse: impl Fn(&Value) -> Result<T, String>,
+) -> (T, Warnings) {
     let name = key.rsplit('.').next().unwrap_or(key);
     match table.and_then(|table| table.get(name)) {
         None => (default, Vec::new()),
-        Some(Value::String(text)) => parse(text).map_or_else(
+        Some(value) => parse(value).map_or_else(
             |reason| (default, vec![invalid(key, &reason)]),
             |value| (value, Vec::new()),
         ),
-        Some(_) => (default, vec![invalid(key, "expected a string")]),
+    }
+}
+
+fn boolean(value: &Value) -> Result<bool, String> {
+    match value {
+        Value::Boolean(flag) => Ok(*flag),
+        _ => Err("expected true or false".into()),
+    }
+}
+
+/// A whole number from 1 to `max`.
+fn positive<T: TryFrom<i64>>(value: &Value, max: i64) -> Result<T, String> {
+    match value {
+        Value::Integer(n) if (1..=max).contains(n) => {
+            T::try_from(*n).map_err(|_| format!("expected a whole number from 1 to {max}"))
+        }
+        _ => Err(format!("expected a whole number from 1 to {max}")),
     }
 }
 
@@ -169,7 +238,9 @@ fn invalid(key: &str, reason: &str) -> ConfigWarning {
 mod tests {
     use super::*;
     use crate::accelerator::{Key, Modifier};
-    use crate::config::{DictationMode, Language, ModelSize, Style, WhisperModel, DEFAULT_FILE};
+    use crate::config::{
+        DictationMode, Language, ModelSize, RewriteModel, Style, WhisperModel, DEFAULT_FILE,
+    };
 
     fn parse_mac(text: &str) -> (Config, Warnings) {
         parse(text, Os::MacOs)
@@ -209,6 +280,10 @@ mod tests {
 
             [rewrite]
             style = "concise"
+            model = "gemma3-4b"
+            keep_loaded = true
+            unload_after_minutes = 30
+            max_characters = 8000
         "#;
 
         let (config, warnings) = parse_mac(text);
@@ -234,7 +309,16 @@ mod tests {
                 mode: DictationMode::PushToTalk,
             }
         );
-        assert_eq!(config.rewrite.style, Style::Concise);
+        assert_eq!(
+            config.rewrite,
+            Rewrite {
+                style: Style::Concise,
+                model: RewriteModel::Gemma3_4B,
+                keep_loaded: true,
+                unload_after_minutes: 30,
+                max_characters: 8000,
+            }
+        );
     }
 
     #[test]
@@ -246,7 +330,8 @@ mod tests {
             config,
             Config {
                 rewrite: Rewrite {
-                    style: Style::Formal
+                    style: Style::Formal,
+                    ..Config::defaults(Os::MacOs).rewrite
                 },
                 ..Config::defaults(Os::MacOs)
             }
@@ -283,6 +368,10 @@ mod tests {
 
             [rewrite]
             style = "pirate"
+            model = "qwen2.5-3b"
+            keep_loaded = "yes"
+            unload_after_minutes = 0
+            max_characters = 1.5
         "#;
 
         let (config, warnings) = parse_mac(text);
@@ -304,6 +393,19 @@ mod tests {
                 invalid(
                     "rewrite.style",
                     "unknown style \"pirate\" (expected neutral, casual, formal, or concise)"
+                ),
+                invalid(
+                    "rewrite.model",
+                    "unknown rewrite model \"qwen2.5-3b\" (expected qwen3-4b, gemma3-4b, or qwen3-1.7b)"
+                ),
+                invalid("rewrite.keep_loaded", "expected true or false"),
+                invalid(
+                    "rewrite.unload_after_minutes",
+                    "expected a whole number from 1 to 1440"
+                ),
+                invalid(
+                    "rewrite.max_characters",
+                    "expected a whole number from 1 to 100000"
                 ),
             ]
         );

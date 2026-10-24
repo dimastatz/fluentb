@@ -5,7 +5,8 @@
 
 use crate::facade::{Hotkey, InputEvent};
 use crate::tray::menu::MenuAction;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::{Duration, Instant};
 
 /// A raw event from the platform's hotkey or menu handler.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +45,40 @@ pub fn route(signal: &Signal, hotkeys: &[(u32, Hotkey)]) -> Option<Route> {
 #[must_use]
 pub fn next_route(signals: &Receiver<Signal>, hotkeys: &[(u32, Hotkey)]) -> Option<Route> {
     signals.iter().find_map(|signal| route(&signal, hotkeys))
+}
+
+/// What waiting for a signal with a deadline led to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Wait {
+    Route(Route),
+    /// The deadline passed first, so time-based work (unloading a model) can run.
+    TimedOut,
+    /// Every sender is gone.
+    Closed,
+}
+
+/// Like [`next_route`], but gives up after `timeout`; `None` waits forever.
+#[must_use]
+pub fn next_route_within(
+    signals: &Receiver<Signal>,
+    hotkeys: &[(u32, Hotkey)],
+    timeout: Option<Duration>,
+) -> Wait {
+    let Some(timeout) = timeout else {
+        return next_route(signals, hotkeys).map_or(Wait::Closed, Wait::Route);
+    };
+    let deadline = Instant::now() + timeout;
+    std::iter::from_fn(|| {
+        let left = deadline.saturating_duration_since(Instant::now());
+        Some(match signals.recv_timeout(left) {
+            Ok(signal) => route(&signal, hotkeys).map(Wait::Route),
+            Err(RecvTimeoutError::Timeout) => Some(Wait::TimedOut),
+            Err(RecvTimeoutError::Disconnected) => Some(Wait::Closed),
+        })
+    })
+    .flatten()
+    .next()
+    .unwrap_or(Wait::Closed)
 }
 
 #[cfg(test)]
@@ -115,6 +150,33 @@ mod tests {
             next_route(&signals, &HOTKEYS),
             Some(Route::Input(InputEvent::QuitRequested))
         );
+    }
+
+    #[test]
+    fn waits_with_a_deadline() {
+        let (sender, signals) = mpsc::channel();
+        let short = Some(Duration::from_millis(10));
+
+        assert_eq!(next_route_within(&signals, &HOTKEYS, short), Wait::TimedOut);
+
+        [Signal::Menu("about".into()), Signal::Menu("quit".into())]
+            .into_iter()
+            .for_each(|signal| sender.send(signal).unwrap());
+        assert_eq!(
+            next_route_within(&signals, &HOTKEYS, short),
+            Wait::Route(Route::Input(InputEvent::QuitRequested)),
+            "ignored signals don't end the wait"
+        );
+
+        sender.send(Signal::Menu("open-config".into())).unwrap();
+        assert_eq!(
+            next_route_within(&signals, &HOTKEYS, None),
+            Wait::Route(Route::OpenConfig)
+        );
+
+        drop(sender);
+        assert_eq!(next_route_within(&signals, &HOTKEYS, short), Wait::Closed);
+        assert_eq!(next_route_within(&signals, &HOTKEYS, None), Wait::Closed);
     }
 
     #[test]

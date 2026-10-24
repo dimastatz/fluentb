@@ -39,6 +39,17 @@ pub enum DictationMode {
     PushToTalk,
 }
 
+/// The local language model that rewrites text. All run on-device with llama.cpp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RewriteModel {
+    /// Qwen3 4B: the default. Apache 2.0.
+    Qwen3_4B,
+    /// Gemma 3 4B: strong multilingual rewriting. Gemma Terms of Use.
+    Gemma3_4B,
+    /// Qwen3 1.7B: the light option for Macs with less memory. Apache 2.0.
+    Qwen3_1_7B,
+}
+
 /// The tone the rewrite engine aims for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Style {
@@ -65,6 +76,39 @@ impl ModelSize {
             Self::Medium => "medium",
             Self::LargeV3 => "large-v3",
         }
+    }
+}
+
+impl RewriteModel {
+    pub const ALL: [Self; 3] = [Self::Qwen3_4B, Self::Gemma3_4B, Self::Qwen3_1_7B];
+
+    /// The name used in the config file.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Qwen3_4B => "qwen3-4b",
+            Self::Gemma3_4B => "gemma3-4b",
+            Self::Qwen3_1_7B => "qwen3-1.7b",
+        }
+    }
+}
+
+impl fmt::Display for RewriteModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.id())
+    }
+}
+
+impl FromStr for RewriteModel {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, String> {
+        Self::ALL
+            .into_iter()
+            .find(|model| model.id() == text)
+            .ok_or_else(|| {
+                format!("unknown rewrite model \"{text}\" (expected qwen3-4b, gemma3-4b, or qwen3-1.7b)")
+            })
     }
 }
 
@@ -178,6 +222,17 @@ mod tests {
                     "{error}"
                 );
             });
+    }
+
+    #[test]
+    fn rewrite_models_round_trip() {
+        RewriteModel::ALL.into_iter().for_each(|model| {
+            assert_eq!(model.to_string().parse(), Ok(model));
+        });
+        assert!("qwen2.5-3b"
+            .parse::<RewriteModel>()
+            .unwrap_err()
+            .starts_with("unknown rewrite model \"qwen2.5-3b\""));
     }
 
     #[test]

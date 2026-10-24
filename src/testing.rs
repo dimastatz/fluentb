@@ -1,7 +1,9 @@
 //! A scripted [`Facade`] for tests: it plays back queued input events, records every
 //! side effect, and can be told to fail any call.
 
-use crate::facade::{Audio, Facade, FacadeError, HotkeyBinding, InputEvent, Result, TrayStatus};
+use crate::facade::{
+    Audio, Facade, FacadeError, HotkeyBinding, InputEvent, Replacement, Result, TrayStatus,
+};
 use std::collections::VecDeque;
 
 pub const SAMPLE_RATE: u32 = 16_000;
@@ -15,6 +17,7 @@ pub enum Call {
     Transcribe,
     SelectedText,
     Rewrite,
+    ReplaceSelection,
     InsertText,
     SetTrayStatus,
     Notify,
@@ -28,7 +31,9 @@ impl Call {
             Self::RegisterHotkeys => FacadeError::Hotkeys(reason),
             Self::StartRecording | Self::StopRecording => FacadeError::Microphone(reason),
             Self::Transcribe => FacadeError::Transcription(reason),
-            Self::SelectedText | Self::InsertText => FacadeError::TextAccess(reason),
+            Self::SelectedText | Self::InsertText | Self::ReplaceSelection => {
+                FacadeError::TextAccess(reason)
+            }
             Self::Rewrite => FacadeError::Rewrite(reason),
             Self::SetTrayStatus | Self::Notify => FacadeError::Tray(reason),
         }
@@ -41,10 +46,13 @@ pub struct FakeFacade {
     pub events: VecDeque<InputEvent>,
     pub transcript: String,
     pub selection: Option<String>,
+    /// What is selected by the time a rewrite finishes, if the user changed it.
+    pub selection_after_rewrite: Option<String>,
     pub failing: Vec<Call>,
     pub recording: bool,
     pub bindings: Vec<HotkeyBinding>,
     pub inserted: Vec<String>,
+    pub clipboard: Vec<String>,
     pub tray: Vec<TrayStatus>,
     pub notifications: Vec<String>,
 }
@@ -55,10 +63,12 @@ impl Default for FakeFacade {
             events: VecDeque::new(),
             transcript: "hello world".into(),
             selection: None,
+            selection_after_rewrite: None,
             failing: Vec::new(),
             recording: false,
             bindings: Vec::new(),
             inserted: Vec::new(),
+            clipboard: Vec::new(),
             tray: Vec::new(),
             notifications: Vec::new(),
         }
@@ -127,6 +137,21 @@ impl Facade for FakeFacade {
     fn rewrite(&mut self, text: &str) -> Result<String> {
         self.check(Call::Rewrite)?;
         Ok(text.trim().into())
+    }
+
+    fn replace_selection(&mut self, original: &str, replacement: &str) -> Result<Replacement> {
+        self.check(Call::ReplaceSelection)?;
+        let current = self
+            .selection_after_rewrite
+            .as_ref()
+            .or(self.selection.as_ref());
+        if current.map(String::as_str) == Some(original) {
+            self.inserted.push(replacement.into());
+            Ok(Replacement::Replaced)
+        } else {
+            self.clipboard.push(replacement.into());
+            Ok(Replacement::Copied)
+        }
     }
 
     fn insert_text(&mut self, text: &str) -> Result<()> {

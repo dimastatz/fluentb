@@ -28,6 +28,14 @@ mode = "toggle"
 [rewrite]
 # neutral, casual, formal, or concise.
 style = "neutral"
+# The local model that rewrites text: qwen3-4b, gemma3-4b, or qwen3-1.7b (lighter).
+model = "qwen3-4b"
+# The model is unloaded after this many idle minutes, to free memory.
+unload_after_minutes = 10
+# Set to true to keep the model in memory for instant rewrites.
+keep_loaded = false
+# Longer selections are not rewritten.
+max_characters = 4000
 "#;
 
 const APP_DIR: &str = "fluentb";

@@ -12,6 +12,11 @@ pub enum Effect {
     Transcribe(Audio),
     ReadSelection,
     Rewrite(String),
+    /// Puts a rewrite in place of the selection it was made from.
+    ReplaceSelection {
+        original: String,
+        replacement: String,
+    },
     InsertText(String),
     /// Best effort: a tray failure is not reported back.
     SetTray(TrayStatus),

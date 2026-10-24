@@ -15,6 +15,8 @@ mod insert;
 mod notify;
 mod permissions;
 mod recorder;
+mod rewriter;
+mod selection;
 mod transcriber;
 mod tray;
 
