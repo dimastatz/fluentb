@@ -47,10 +47,10 @@ pub struct Rewriter {
 }
 
 impl Rewriter {
-    pub fn new(config: &Rewrite) -> Self {
+    pub fn new(model: RewriteModel, config: &Rewrite) -> Self {
         Self {
-            model: config.model,
-            path: models::default_path(Model::Rewrite(config.model)),
+            model,
+            path: models::default_path(Model::Rewrite(model)),
             style: config.style,
             max_characters: config.max_characters,
             policy: UnloadPolicy::from_config(config),
@@ -189,10 +189,7 @@ mod tests {
     use crate::platform::Os;
 
     fn rewriter(model: RewriteModel) -> Rewriter {
-        Rewriter::new(&Rewrite {
-            model,
-            ..Config::defaults(Os::MacOs).rewrite
-        })
+        Rewriter::new(model, &Config::defaults(Os::MacOs).rewrite)
     }
 
     /// Needs the light model downloaded; run with `cargo test --release -- --ignored`.
@@ -253,10 +250,13 @@ mod tests {
 
     #[test]
     fn refuses_long_selections_before_loading_anything() {
-        let mut rewriter = Rewriter::new(&Rewrite {
-            max_characters: 3,
-            ..Config::defaults(Os::MacOs).rewrite
-        });
+        let mut rewriter = Rewriter::new(
+            RewriteModel::Qwen3_1_7B,
+            &Rewrite {
+                max_characters: 3,
+                ..Config::defaults(Os::MacOs).rewrite
+            },
+        );
 
         let error = rewriter.rewrite("four").unwrap_err();
 

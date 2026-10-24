@@ -4,14 +4,16 @@
 //! function that touches the file system. Both always return a usable `Config`:
 //! anything invalid falls back to its default and produces a [`ConfigWarning`].
 
+mod edit;
 mod load;
 mod parse;
 mod values;
 mod warning;
 
+pub use edit::set_string;
 pub use load::{default_path, load, path_for, DEFAULT_FILE};
 pub use parse::parse;
-pub use values::{DictationMode, Language, ModelSize, RewriteModel, Style, WhisperModel};
+pub use values::{Choice, DictationMode, Language, ModelSize, RewriteModel, Style, WhisperModel};
 pub use warning::ConfigWarning;
 
 use crate::accelerator::{Accelerator, Key, Modifier};
@@ -34,7 +36,7 @@ pub struct Hotkeys {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dictation {
-    pub model: WhisperModel,
+    pub model: Choice<WhisperModel>,
     pub language: Language,
     pub mode: DictationMode,
 }
@@ -42,7 +44,7 @@ pub struct Dictation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rewrite {
     pub style: Style,
-    pub model: RewriteModel,
+    pub model: Choice<RewriteModel>,
     /// Keep the model in memory instead of unloading it when idle.
     pub keep_loaded: bool,
     /// Minutes without a rewrite before the model is unloaded to free memory.
@@ -63,16 +65,13 @@ impl Config {
         Self {
             hotkeys: Hotkeys::defaults(os),
             dictation: Dictation {
-                model: WhisperModel {
-                    size: ModelSize::Base,
-                    english_only: true,
-                },
+                model: Choice::Auto,
                 language: Language::Auto,
                 mode: DictationMode::Toggle,
             },
             rewrite: Rewrite {
                 style: Style::Neutral,
-                model: RewriteModel::Qwen3_4B,
+                model: Choice::Auto,
                 keep_loaded: false,
                 unload_after_minutes: Rewrite::DEFAULT_UNLOAD_AFTER_MINUTES,
                 max_characters: Rewrite::DEFAULT_MAX_CHARACTERS,

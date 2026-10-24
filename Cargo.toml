@@ -8,6 +8,10 @@ license = "MIT"
 
 [dependencies]
 global-hotkey = "0.9"
+fs4 = "1.1"
+sha2 = "0.11"
+# Model downloads only. Native TLS uses the OS certificate store.
+ureq = { version = "3.5", default-features = false, features = ["native-tls-no-default"] }
 toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "serde"] }
 
 [lints.rust]
@@ -32,13 +36,15 @@ tempfile = "3.27.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 arboard = { version = "3.7", default-features = false }
+block2 = "0.6"
 core-foundation = "0.10"
 core-graphics = "0.25"
 cpal = "0.18"
 # Dynamically linked: whisper-rs links its own ggml statically, and two static copies
 # would clash. See build.rs for the rpath.
 llama-cpp-2 = { version = "0.1.160", default-features = false, features = ["metal", "dynamic-link"] }
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat"] }
+objc2 = "0.6"
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
 tao = "0.37"
 tray-icon = "0.26"
 whisper-rs = { version = "0.16", features = ["metal"] }

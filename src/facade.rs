@@ -8,6 +8,7 @@
 //! Each platform (macOS now, Windows and Linux later) provides its own implementation.
 
 use crate::accelerator::Accelerator;
+use crate::models::Kind;
 use std::fmt;
 
 /// The global hotkeys fluentb listens for.
@@ -26,12 +27,34 @@ pub struct HotkeyBinding {
     pub accelerator: Accelerator,
 }
 
+/// A macOS-style privacy permission fluentb needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Permission {
+    /// To record dictation.
+    Microphone,
+    /// To read selections and type text into other apps.
+    Accessibility,
+}
+
+/// Whether a model can be used yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModelStatus {
+    Ready,
+    Downloading {
+        percent: u8,
+    },
+    /// The download failed; it is retried the next time fluentb starts.
+    Failed(String),
+}
+
 /// Events the outside world delivers to the state manager.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputEvent {
     HotkeyPressed(Hotkey),
     /// The user chose "Quit" from the tray menu.
     QuitRequested,
+    /// A model finished downloading, made progress, or failed.
+    ModelChanged(Kind, ModelStatus),
 }
 
 /// Captured microphone audio: mono samples at `sample_rate` Hz.
