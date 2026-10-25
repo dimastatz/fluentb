@@ -25,6 +25,10 @@ model = "auto"
 language = "auto"
 # toggle: press to start and again to stop. push-to-talk: hold while speaking.
 mode = "toggle"
+# Play a short sound when recording starts and stops.
+sounds = true
+# Recording stops on its own after this many seconds.
+max_recording_seconds = 120
 
 [rewrite]
 # neutral, casual, formal, or concise.

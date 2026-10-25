@@ -12,7 +12,7 @@ One PRD per milestone. Each milestone ends in something demoable and keeps CI gr
 | M4  | [Tray app shell](m04-tray-shell.md)                    | In review | M3       |
 | M5  | [Rewrite](m05-rewrite.md)                              | In review | M3, M4   |
 | M6  | [Model management and first run](m06-model-onboarding.md) | In review | M3, M4 |
-| M7  | [Polish and robustness](m07-polish.md)                 | Planned | M5, M6     |
+| M7  | [Polish and robustness](m07-polish.md)                 | In review | M5, M6   |
 | M8  | [macOS distribution](m08-macos-distribution.md)        | Planned | M7         |
 | M9  | [Windows support](m09-windows.md)                      | Planned | M8         |
 | M10 | [Linux support](m10-linux.md)                          | Planned | M8         |

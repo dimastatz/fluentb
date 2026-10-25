@@ -3,21 +3,26 @@
 use super::recorder::Recording;
 use super::rewriter::Rewriter;
 use super::transcriber::Transcriber;
-use super::{insert, notify, permissions, selection, MainRequest};
+use super::{insert, launch_agent_path, notify, permissions, selection, MainRequest};
 use crate::config::{self, Config, Language, Rewrite, RewriteModel, WhisperModel};
 use crate::download::format_size;
 use crate::facade::{
-    Audio, Facade, FacadeError, Hotkey, HotkeyBinding, InputEvent, ModelStatus, Replacement,
-    Result, TrayStatus,
+    Audio, Cue, Facade, FacadeError, Hotkey, HotkeyBinding, InputEvent, ModelStatus, Replacement,
+    Result, Timer, TrayStatus,
 };
+use crate::logging;
 use crate::models::{self, Kind, Model};
 use crate::platform::bridge::{self, Route, Signal, Wait};
-use crate::platform::keymap;
+use crate::platform::timers::{self, Timers};
+use crate::platform::{keymap, login};
 use crate::tray::menu::MenuAction;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::mpsc;
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
+use std::thread;
+use std::time::{Duration, Instant};
 use tao::event_loop::EventLoopProxy;
 
 /// Everything the facade needs from startup.
@@ -25,6 +30,11 @@ pub struct Setup {
     pub config_path: Option<PathBuf>,
     /// Hotkey, menu and download events.
     pub signals: mpsc::Receiver<Signal>,
+    /// For the microphone to report that it went away.
+    pub signals_sender: mpsc::Sender<Signal>,
+    /// Set by the hotkey handler when Esc is pressed, so a running transcription or
+    /// rewrite can stop early. Shared because the handler runs on the main thread.
+    pub cancel: Arc<AtomicBool>,
     pub proxy: EventLoopProxy<MainRequest>,
     pub speech: WhisperModel,
     pub rewrite: RewriteModel,
@@ -42,6 +52,7 @@ pub struct MacFacade {
     recording: Option<Recording>,
     transcriber: Transcriber,
     rewriter: Rewriter,
+    timers: Timers,
 }
 
 impl MacFacade {
@@ -54,6 +65,7 @@ impl MacFacade {
             setup,
             hotkeys: Vec::new(),
             recording: None,
+            timers: Timers::default(),
         }
     }
 
@@ -70,6 +82,8 @@ impl MacFacade {
             MenuAction::FixPermission(permission) => permissions::open_settings(permission),
             MenuAction::RemoveUnusedModels => self.remove_unused_models(),
             MenuAction::SelectModel(model) => return Some(self.select(model)),
+            MenuAction::ToggleLaunchAtLogin => self.toggle_launch_at_login(),
+            MenuAction::RevealLogs => reveal_logs(),
             MenuAction::Quit => {}
         }
         None
@@ -144,6 +158,32 @@ impl MacFacade {
         models::is_complete(model, size)
     }
 
+    /// Adds or removes the launch agent that starts fluentb at login.
+    fn toggle_launch_at_login(&self) {
+        let result = launch_agent_path()
+            .ok_or_else(|| "couldn't find your home folder (is HOME set?)".to_owned())
+            .and_then(|path| {
+                let enable = !path.exists();
+                if enable {
+                    install_launch_agent(&path)
+                } else {
+                    fs::remove_file(&path)
+                }
+                .map(|()| enable)
+                .map_err(|error| error.to_string())
+            });
+        match result {
+            Ok(enabled) => {
+                tracing::info!(enabled, "launch at login");
+                let _ = self
+                    .setup
+                    .proxy
+                    .send_event(MainRequest::LaunchAtLogin(enabled));
+            }
+            Err(reason) => notify::show(&format!("Couldn't change launch at login: {reason}")),
+        }
+    }
+
     /// Deletes downloaded models, and unfinished downloads, that aren't in use.
     fn remove_unused_models(&self) {
         let Some(dir) = self.setup.models_dir.as_deref() else {
@@ -209,9 +249,18 @@ impl Facade for MacFacade {
     }
 
     fn next_event(&mut self) -> Result<InputEvent> {
-        // Waits for input, waking up to unload the rewrite model once it goes idle.
+        // Waits for input, waking up for timers and to unload the rewrite model once
+        // it goes idle.
         loop {
-            let deadline = self.rewriter.time_until_unload();
+            let (due, pending) = std::mem::take(&mut self.timers).take_due(Instant::now());
+            self.timers = pending;
+            if let Some(timer) = due {
+                return Ok(InputEvent::TimerFired(timer));
+            }
+            let deadline = timers::sooner(
+                self.rewriter.time_until_unload(),
+                self.timers.time_left(Instant::now()),
+            );
             match bridge::next_route_within(&self.setup.signals, &self.hotkeys, deadline) {
                 Wait::Route(Route::Input(event)) => return Ok(event),
                 Wait::Route(Route::Action(action)) => {
@@ -233,8 +282,9 @@ impl Facade for MacFacade {
     }
 
     fn start_recording(&mut self) -> Result<()> {
+        self.setup.cancel.store(false, Ordering::Relaxed);
         permissions::check_microphone()?;
-        self.recording = Some(Recording::start()?);
+        self.recording = Some(Recording::start(&self.setup.signals_sender)?);
         Ok(())
     }
 
@@ -246,16 +296,17 @@ impl Facade for MacFacade {
     }
 
     fn transcribe(&mut self, audio: &Audio) -> Result<String> {
-        self.transcriber.transcribe(audio)
+        self.transcriber.transcribe(audio, &self.setup.cancel)
     }
 
     fn selected_text(&mut self) -> Result<Option<String>> {
+        self.setup.cancel.store(false, Ordering::Relaxed);
         permissions::check_accessibility()?;
         selection::read()
     }
 
     fn rewrite(&mut self, text: &str) -> Result<String> {
-        self.rewriter.rewrite(text)
+        self.rewriter.rewrite(text, &self.setup.cancel)
     }
 
     fn replace_selection(&mut self, original: &str, replacement: &str) -> Result<Replacement> {
@@ -284,6 +335,62 @@ impl Facade for MacFacade {
     fn notify(&mut self, message: &str) -> Result<()> {
         notify::show(message);
         Ok(())
+    }
+
+    fn play_cue(&mut self, cue: Cue) -> Result<()> {
+        let sound = match cue {
+            Cue::Start => "Tink",
+            Cue::Stop => "Pop",
+        };
+        let mut child = Command::new("afplay")
+            .args(["-v", CUE_VOLUME])
+            .arg(format!("/System/Library/Sounds/{sound}.aiff"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| FacadeError::Tray(format!("couldn't play a sound: {error}")))?;
+        // Reaps the process without making the caller wait for the sound to end.
+        thread::spawn(move || child.wait());
+        Ok(())
+    }
+
+    fn start_timer(&mut self, timer: Timer, after: Duration) -> Result<()> {
+        self.timers = std::mem::take(&mut self.timers).start(timer, Instant::now() + after);
+        Ok(())
+    }
+}
+
+/// Quiet enough to be a cue rather than an alert.
+const CUE_VOLUME: &str = "0.4";
+
+/// Writes the launch agent for this executable.
+fn install_launch_agent(path: &Path) -> std::io::Result<()> {
+    let executable = std::env::current_exe()?;
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::write(path, login::agent_plist(&executable))
+}
+
+/// Shows the log folder in Finder.
+fn reveal_logs() {
+    let result = logging::default_dir()
+        .ok_or_else(|| "couldn't find the log folder (is HOME set?)".to_owned())
+        .and_then(|dir| {
+            fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+            Command::new("open")
+                .arg(&dir)
+                .status()
+                .map_err(|error| error.to_string())
+        })
+        .and_then(|status| {
+            status
+                .success()
+                .then_some(())
+                .ok_or_else(|| format!("`open` failed with {status}"))
+        });
+    if let Err(reason) = result {
+        notify::show(&format!("Couldn't show the logs: {reason}"));
     }
 }
 

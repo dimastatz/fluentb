@@ -129,6 +129,14 @@ mod tests {
     }
 
     #[test]
+    fn esc_maps_without_modifiers() {
+        assert_eq!(
+            to_hotkey(&Accelerator::esc()),
+            Some(HotKey::new(Some(Modifiers::empty()), Code::Escape))
+        );
+    }
+
+    #[test]
     fn maps_modifiers_and_keys() {
         let cases = [
             (

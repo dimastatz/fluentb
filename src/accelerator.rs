@@ -53,6 +53,12 @@ impl Accelerator {
         Self { modifiers, key }
     }
 
+    /// Esc on its own: the cancel hotkey, registered only while fluentb is busy.
+    #[must_use]
+    pub fn esc() -> Self {
+        Self::new(Vec::new(), Key::Escape)
+    }
+
     /// The modifiers, sorted and without duplicates.
     #[must_use]
     pub fn modifiers(&self) -> &[Modifier] {

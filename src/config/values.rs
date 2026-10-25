@@ -66,7 +66,7 @@ pub enum Language {
 pub enum DictationMode {
     /// Press once to start, again to stop.
     Toggle,
-    /// Hold to record, release to stop (implemented in M7).
+    /// Hold to record, release to stop.
     PushToTalk,
 }
 

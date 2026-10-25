@@ -10,6 +10,7 @@
 use crate::accelerator::Accelerator;
 use crate::models::Kind;
 use std::fmt;
+use std::time::Duration;
 
 /// The global hotkeys fluentb listens for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -18,6 +19,8 @@ pub enum Hotkey {
     Dictate,
     /// Rewrite the currently selected text into clean, fluent text.
     Rewrite,
+    /// Esc: throw away the dictation or rewrite in progress. Registered only while busy.
+    Cancel,
 }
 
 /// A key combination bound to a [`Hotkey`], e.g. `Cmd+Shift+D`.
@@ -47,10 +50,32 @@ pub enum ModelStatus {
     Failed(String),
 }
 
+/// A timer the state manager can start. Starting one again replaces the pending one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Timer {
+    /// Stops a recording that has run for the configured maximum length.
+    MaxRecording,
+    /// Clears the error icon after a short while.
+    ClearError,
+}
+
+/// A short sound played when recording starts or stops.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cue {
+    Start,
+    Stop,
+}
+
 /// Events the outside world delivers to the state manager.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputEvent {
     HotkeyPressed(Hotkey),
+    /// A hotkey was let go, for push-to-talk.
+    HotkeyReleased(Hotkey),
+    /// A timer started with [`Facade::start_timer`] ran out.
+    TimerFired(Timer),
+    /// The microphone disappeared mid-recording (e.g. Bluetooth headphones disconnected).
+    MicrophoneLost,
     /// The user chose "Quit" from the tray menu.
     QuitRequested,
     /// A model finished downloading, made progress, or failed.
@@ -93,6 +118,28 @@ pub enum FacadeError {
     Rewrite(String),
     TextAccess(String),
     Tray(String),
+    /// The user pressed Esc while the work was running; not reported to the user.
+    Cancelled,
+    /// A bug: a facade call panicked. The app reports it and keeps running.
+    Internal(String),
+}
+
+impl FacadeError {
+    /// The failing subsystem without the reason, safe to log: reasons may quote paths
+    /// or engine messages, never user text, but logs record kinds only.
+    #[must_use]
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::Hotkeys(_) => "hotkeys",
+            Self::Microphone(_) => "microphone",
+            Self::Transcription(_) => "transcription",
+            Self::Rewrite(_) => "rewrite",
+            Self::TextAccess(_) => "text access",
+            Self::Tray(_) => "tray",
+            Self::Cancelled => "cancelled",
+            Self::Internal(_) => "internal",
+        }
+    }
 }
 
 impl fmt::Display for FacadeError {
@@ -104,6 +151,8 @@ impl fmt::Display for FacadeError {
             Self::Rewrite(reason) => write!(f, "rewrite: {reason}"),
             Self::TextAccess(reason) => write!(f, "text access: {reason}"),
             Self::Tray(reason) => write!(f, "tray: {reason}"),
+            Self::Cancelled => write!(f, "cancelled"),
+            Self::Internal(reason) => write!(f, "internal error: {reason}"),
         }
     }
 }
@@ -156,6 +205,15 @@ pub trait Facade {
 
     /// Shows a short, non-blocking notification, e.g. to report an error.
     fn notify(&mut self, message: &str) -> Result<()>;
+
+    /// Plays a short, non-blocking sound.
+    fn play_cue(&mut self, cue: Cue) -> Result<()>;
+
+    // Time
+
+    /// Makes [`Facade::next_event`] deliver [`InputEvent::TimerFired`] after `after`,
+    /// replacing a pending timer of the same kind.
+    fn start_timer(&mut self, timer: Timer, after: Duration) -> Result<()>;
 }
 
 #[cfg(test)]
@@ -180,11 +238,17 @@ mod tests {
                 "text access: no focus",
             ),
             (FacadeError::Tray("hidden".into()), "tray: hidden"),
+            (FacadeError::Cancelled, "cancelled"),
+            (
+                FacadeError::Internal("panicked".into()),
+                "internal error: panicked",
+            ),
         ];
 
-        cases
-            .iter()
-            .for_each(|(error, expected)| assert_eq!(error.to_string(), *expected));
+        cases.iter().for_each(|(error, expected)| {
+            assert_eq!(error.to_string(), *expected);
+            assert!(expected.starts_with(error.kind()), "{error:?}");
+        });
     }
 
     #[test]

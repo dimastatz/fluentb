@@ -2,12 +2,14 @@
 
 use crate::audio;
 use crate::facade::{Audio, FacadeError, Result};
+use crate::platform::bridge::Signal;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, SampleFormat, SizedSample, Stream, StreamConfig};
+use cpal::{ErrorKind, FromSample, SampleFormat, SizedSample, Stream, StreamConfig};
 use std::sync::mpsc;
 
 /// An open microphone stream. The audio callback sends chunks over a channel, so no
-/// buffer is shared between threads.
+/// buffer is shared between threads. Dropping it closes the microphone, so it is
+/// released on every exit path, including a panic.
 pub struct Recording {
     stream: Stream,
     chunks: mpsc::Receiver<Vec<f32>>,
@@ -16,8 +18,9 @@ pub struct Recording {
 }
 
 impl Recording {
-    /// Opens the default input device and starts capturing.
-    pub fn start() -> Result<Self> {
+    /// Opens the default input device and starts capturing. If the device goes away
+    /// mid-recording, [`Signal::MicrophoneLost`] is sent on `signals`.
+    pub fn start(signals: &mpsc::Sender<Signal>) -> Result<Self> {
         let device = cpal::default_host()
             .default_input_device()
             .ok_or_else(|| FacadeError::Microphone("no microphone was found".into()))?;
@@ -26,10 +29,10 @@ impl Recording {
         let config: StreamConfig = supported.into();
         let (sender, chunks) = mpsc::channel();
         let stream = match format {
-            SampleFormat::F32 => open::<f32>(&device, &config, sender),
-            SampleFormat::I16 => open::<i16>(&device, &config, sender),
-            SampleFormat::I32 => open::<i32>(&device, &config, sender),
-            SampleFormat::U16 => open::<u16>(&device, &config, sender),
+            SampleFormat::F32 => open::<f32>(&device, &config, sender, signals.clone()),
+            SampleFormat::I16 => open::<i16>(&device, &config, sender, signals.clone()),
+            SampleFormat::I32 => open::<i32>(&device, &config, sender, signals.clone()),
+            SampleFormat::U16 => open::<u16>(&device, &config, sender, signals.clone()),
             other => Err(FacadeError::Microphone(format!(
                 "unsupported sample format {other}"
             ))),
@@ -55,6 +58,7 @@ fn open<T>(
     device: &cpal::Device,
     config: &StreamConfig,
     sender: mpsc::Sender<Vec<f32>>,
+    signals: mpsc::Sender<Signal>,
 ) -> Result<Stream>
 where
     T: SizedSample,
@@ -70,7 +74,12 @@ where
                         .collect(),
                 );
             },
-            |error| eprintln!("fluentb: microphone error: {error}"),
+            move |error| {
+                tracing::warn!(kind = ?error.kind(), "microphone error");
+                if error.kind() == ErrorKind::DeviceNotAvailable {
+                    let _ = signals.send(Signal::MicrophoneLost);
+                }
+            },
             None,
         )
         .map_err(microphone)

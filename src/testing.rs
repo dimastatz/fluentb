@@ -2,11 +2,58 @@
 //! side effect, and can be told to fail any call.
 
 use crate::facade::{
-    Audio, Facade, FacadeError, HotkeyBinding, InputEvent, Replacement, Result, TrayStatus,
+    Audio, Cue, Facade, FacadeError, HotkeyBinding, InputEvent, Replacement, Result, Timer,
+    TrayStatus,
 };
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::io;
+use std::sync::Once;
+use std::time::Duration;
 
 pub const SAMPLE_RATE: u32 = 16_000;
+
+thread_local! {
+    static CAPTURED: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
+}
+
+/// Writes log lines into this thread's capture buffer, if one is open.
+struct ThreadBuffer;
+
+impl io::Write for ThreadBuffer {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        CAPTURED.with_borrow_mut(|buffer| {
+            if let Some(buffer) = buffer {
+                buffer.extend_from_slice(bytes);
+            }
+        });
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Returns everything logged on this thread while `f` runs.
+///
+/// One global subscriber serves every test. A scoped `with_default` per test would
+/// race with tests on other threads, which can cache a log call as disabled.
+pub fn capture_logs(f: impl FnOnce()) -> String {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_writer(|| ThreadBuffer)
+            .finish();
+        let _ = tracing::subscriber::set_global_default(subscriber);
+    });
+    tracing::callsite::rebuild_interest_cache();
+    CAPTURED.set(Some(Vec::new()));
+    f();
+    let bytes = CAPTURED.take().unwrap_or_default();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
 
 /// A facade method the fake can be told to fail.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +68,8 @@ pub enum Call {
     InsertText,
     SetTrayStatus,
     Notify,
+    PlayCue,
+    StartTimer,
 }
 
 impl Call {
@@ -35,7 +84,9 @@ impl Call {
                 FacadeError::TextAccess(reason)
             }
             Self::Rewrite => FacadeError::Rewrite(reason),
-            Self::SetTrayStatus | Self::Notify => FacadeError::Tray(reason),
+            Self::SetTrayStatus | Self::Notify | Self::PlayCue | Self::StartTimer => {
+                FacadeError::Tray(reason)
+            }
         }
     }
 }
@@ -44,33 +95,47 @@ impl Call {
 #[derive(Debug)]
 pub struct FakeFacade {
     pub events: VecDeque<InputEvent>,
+    /// The samples `stop_recording` returns.
+    pub audio: Vec<f32>,
     pub transcript: String,
     pub selection: Option<String>,
     /// What is selected by the time a rewrite finishes, if the user changed it.
     pub selection_after_rewrite: Option<String>,
     pub failing: Vec<Call>,
+    /// Calls that report [`FacadeError::Cancelled`], as if Esc interrupted them.
+    pub cancelled: Vec<Call>,
+    /// Calls that panic, as a bug in a platform adapter would.
+    pub panicking: Vec<Call>,
     pub recording: bool,
     pub bindings: Vec<HotkeyBinding>,
     pub inserted: Vec<String>,
     pub clipboard: Vec<String>,
     pub tray: Vec<TrayStatus>,
     pub notifications: Vec<String>,
+    pub cues: Vec<Cue>,
+    pub timers: Vec<(Timer, Duration)>,
 }
 
 impl Default for FakeFacade {
     fn default() -> Self {
         Self {
             events: VecDeque::new(),
+            // One second of sound, loud enough to count as speech.
+            audio: vec![0.5; SAMPLE_RATE as usize],
             transcript: "hello world".into(),
             selection: None,
             selection_after_rewrite: None,
             failing: Vec::new(),
+            cancelled: Vec::new(),
+            panicking: Vec::new(),
             recording: false,
             bindings: Vec::new(),
             inserted: Vec::new(),
             clipboard: Vec::new(),
             tray: Vec::new(),
             notifications: Vec::new(),
+            cues: Vec::new(),
+            timers: Vec::new(),
         }
     }
 }
@@ -85,8 +150,11 @@ impl FakeFacade {
     }
 
     fn check(&self, call: Call) -> Result<()> {
+        assert!(!self.panicking.contains(&call), "{call:?} panicked");
         if self.failing.contains(&call) {
             Err(call.error())
+        } else if self.cancelled.contains(&call) {
+            Err(FacadeError::Cancelled)
         } else {
             Ok(())
         }
@@ -119,7 +187,7 @@ impl Facade for FakeFacade {
         self.recording = false;
         self.check(Call::StopRecording)?;
         Ok(Audio {
-            samples: vec![0.0; SAMPLE_RATE as usize],
+            samples: self.audio.clone(),
             sample_rate: SAMPLE_RATE,
         })
     }
@@ -171,6 +239,18 @@ impl Facade for FakeFacade {
         self.notifications.push(message.into());
         Ok(())
     }
+
+    fn play_cue(&mut self, cue: Cue) -> Result<()> {
+        self.check(Call::PlayCue)?;
+        self.cues.push(cue);
+        Ok(())
+    }
+
+    fn start_timer(&mut self, timer: Timer, after: Duration) -> Result<()> {
+        self.check(Call::StartTimer)?;
+        self.timers.push((timer, after));
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -215,5 +295,26 @@ mod tests {
 
         assert_eq!(facade.notify("hi"), Err(Call::Notify.error()));
         assert!(facade.notifications.is_empty());
+    }
+
+    #[test]
+    fn cancelled_call_reports_cancellation() {
+        let mut facade = FakeFacade {
+            cancelled: vec![Call::Rewrite],
+            ..FakeFacade::default()
+        };
+
+        assert_eq!(facade.rewrite("hi"), Err(FacadeError::Cancelled));
+    }
+
+    #[test]
+    #[should_panic(expected = "PlayCue panicked")]
+    fn panicking_call_panics() {
+        let mut facade = FakeFacade {
+            panicking: vec![Call::PlayCue],
+            ..FakeFacade::default()
+        };
+
+        let _ = facade.play_cue(Cue::Start);
     }
 }

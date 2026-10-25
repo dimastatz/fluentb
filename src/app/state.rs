@@ -29,3 +29,25 @@ pub enum Event {
     SelectionReplaced(Replacement),
     Failed(FacadeError),
 }
+
+impl Event {
+    /// The event's name without its payload (audio, transcripts, selections), safe
+    /// to log.
+    #[must_use]
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::Input(InputEvent::HotkeyPressed(_)) => "hotkey-pressed",
+            Self::Input(InputEvent::HotkeyReleased(_)) => "hotkey-released",
+            Self::Input(InputEvent::TimerFired(_)) => "timer-fired",
+            Self::Input(InputEvent::MicrophoneLost) => "microphone-lost",
+            Self::Input(InputEvent::QuitRequested) => "quit-requested",
+            Self::Input(InputEvent::ModelChanged(..)) => "model-changed",
+            Self::RecordingStopped(_) => "recording-stopped",
+            Self::Transcribed(_) => "transcribed",
+            Self::SelectionRead(_) => "selection-read",
+            Self::Rewritten { .. } => "rewritten",
+            Self::SelectionReplaced(_) => "selection-replaced",
+            Self::Failed(_) => "failed",
+        }
+    }
+}
