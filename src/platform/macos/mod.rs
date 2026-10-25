@@ -22,21 +22,25 @@ mod system;
 mod transcriber;
 mod tray;
 
+use crate::accelerator::Accelerator;
 use crate::app::{self, HotkeyLabels, Models};
 use crate::config::{self, Config, ConfigWarning};
 use crate::facade::{ModelStatus, TrayStatus};
+use crate::logging;
 use crate::models::{self, Kind, Model};
 use crate::onboarding;
 use crate::platform::bridge::Signal;
 use crate::platform::instance::{self, Instance};
-use crate::platform::Os;
+use crate::platform::{keymap, login, Os};
 use crate::tray::menu::{self, MenuState};
 use facade::{MacFacade, Setup};
 use global_hotkey::hotkey::HotKey;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use std::fs::{self, File};
-use std::path::Path;
-use std::sync::mpsc;
+use std::panic::{self, AssertUnwindSafe};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 use tao::event::{Event, StartCause};
@@ -65,12 +69,20 @@ pub(crate) enum MainRequest {
         speech: Model,
         rewrite: Model,
     },
+    /// Launch at login was turned on or off.
+    LaunchAtLogin(bool),
     Exit(i32),
 }
 
 /// Runs fluentb until the user quits or a fatal error occurs.
 pub fn run() -> ! {
     whisper_rs::install_logging_hooks();
+    // Held until the process exits, so buffered log lines keep being written.
+    let _log = logging::default_dir().and_then(|dir| {
+        logging::init(&dir)
+            .map_err(|error| eprintln!("fluentb: logging is off: {error}"))
+            .ok()
+    });
     let config_path = config::default_path();
     // Held until the process exits; the OS releases the lock then.
     let _instance = single_instance(config_path.as_deref());
@@ -86,12 +98,13 @@ pub fn run() -> ! {
     let initial = initial_models(&pending);
 
     let (signals_sender, signals) = mpsc::channel();
-    forward_signals(&signals_sender);
+    let cancel = Arc::new(AtomicBool::new(false));
+    forward_signals(&signals_sender, &cancel);
     let mut event_loop = EventLoopBuilder::<MainRequest>::with_user_event().build();
     // A menu-bar app: no Dock icon, no main window.
     event_loop.set_activation_policy(ActivationPolicy::Accessory);
     let proxy = event_loop.create_proxy();
-    let downloads = downloads::spawn(models_dir.clone(), signals_sender, proxy.clone());
+    let downloads = downloads::spawn(models_dir.clone(), signals_sender.clone(), proxy.clone());
     pending.iter().for_each(|model| {
         let _ = downloads.send(*model);
     });
@@ -101,6 +114,8 @@ pub fn run() -> ! {
     let setup = Setup {
         config_path,
         signals,
+        signals_sender,
+        cancel,
         proxy: proxy.clone(),
         speech,
         rewrite,
@@ -123,6 +138,7 @@ pub fn run() -> ! {
             speech: Model::Whisper(speech),
             rewrite: Model::Rewrite(rewrite),
             missing: permissions::missing(),
+            launch_at_login: launch_agent_path().is_some_and(|path| path.exists()),
         },
     };
     event_loop.run(move |event, _, control_flow| {
@@ -181,19 +197,28 @@ impl MainLoop {
     fn request(&mut self, request: MainRequest) -> bool {
         match request {
             MainRequest::RegisterHotkeys { hotkeys, reply } => {
+                // Only the difference is (un)registered: re-registering a hotkey the
+                // user is holding would lose its release, which push-to-talk needs.
+                let (stale, kept): (Vec<HotKey>, Vec<HotKey>) = self
+                    .registered
+                    .iter()
+                    .partition(|hotkey| !hotkeys.contains(hotkey));
+                let fresh: Vec<HotKey> = hotkeys
+                    .iter()
+                    .filter(|hotkey| !kept.contains(hotkey))
+                    .copied()
+                    .collect();
                 let result = self
                     .manager
                     .as_ref()
                     .map_err(Clone::clone)
                     .and_then(|manager| {
-                        let _ = manager.unregister_all(&self.registered);
+                        let _ = manager.unregister_all(&stale);
                         manager
-                            .register_all(&hotkeys)
+                            .register_all(&fresh)
                             .map_err(|error| error.to_string())
                     });
-                if result.is_ok() {
-                    self.registered = hotkeys;
-                }
+                self.registered = if result.is_ok() { hotkeys } else { kept };
                 let _ = reply.send(result);
                 false
             }
@@ -217,9 +242,20 @@ impl MainLoop {
                 self.state.rewrite = rewrite;
                 true
             }
+            MainRequest::LaunchAtLogin(enabled) => {
+                self.state.launch_at_login = enabled;
+                true
+            }
             MainRequest::Exit(code) => std::process::exit(code),
         }
     }
+}
+
+/// Where the launch-at-login agent goes.
+pub(crate) fn launch_agent_path() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .filter(|home| !home.is_empty())
+        .map(|home| login::agent_path(Path::new(&home)))
 }
 
 /// Whether `model` is fully downloaded into `dir`.
@@ -283,12 +319,20 @@ fn single_instance(config_path: Option<&Path>) -> Option<File> {
 }
 
 /// Sends hotkey and menu events, which arrive on the main thread, to the worker.
-fn forward_signals(signals: &mpsc::Sender<Signal>) {
+/// Esc also sets `cancel` at once, since the worker may be busy transcribing or
+/// rewriting and won't read the channel until it's done.
+fn forward_signals(signals: &mpsc::Sender<Signal>, cancel: &Arc<AtomicBool>) {
     let hotkeys = signals.clone();
+    let cancel = Arc::clone(cancel);
+    let cancel_id = keymap::to_hotkey(&Accelerator::esc()).map(|hotkey| hotkey.id());
     GlobalHotKeyEvent::set_event_handler(Some(move |event: GlobalHotKeyEvent| {
+        let pressed = event.state() == HotKeyState::Pressed;
+        if pressed && Some(event.id()) == cancel_id {
+            cancel.store(true, Ordering::Relaxed);
+        }
         let _ = hotkeys.send(Signal::Hotkey {
             id: event.id(),
-            pressed: event.state() == HotKeyState::Pressed,
+            pressed,
         });
     }));
     let menu = signals.clone();
@@ -307,10 +351,22 @@ fn run_worker(config: &Config, warnings: &[ConfigWarning], setup: Setup, models:
         }
     }
     eprintln!("fluentb is running in the menu bar.");
-    match app::run_app(&mut facade, config, warnings, models) {
-        Ok(()) => 0,
-        Err(error) => {
+    // Effects already catch their own panics; this catches one while reading input,
+    // so the user hears about it instead of being left with dead hotkeys. Returning
+    // drops the facade, which closes the microphone.
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        app::run_app(&mut facade, config, warnings, models)
+    }));
+    match result {
+        Ok(Ok(())) => 0,
+        Ok(Err(error)) => {
+            tracing::error!(error = error.kind(), "stopped");
             notify::show(&format!("fluentb stopped: {error}"));
+            1
+        }
+        Err(_) => {
+            tracing::error!("worker panicked");
+            notify::show("fluentb stopped because of an internal error. Please restart it.");
             1
         }
     }

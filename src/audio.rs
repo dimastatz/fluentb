@@ -64,6 +64,39 @@ pub fn prepare(interleaved: &[f32], channels: u16, sample_rate: u32) -> Audio {
     }
 }
 
+/// The length of one voice-activity frame.
+const FRAME_MS: u32 = 30;
+/// A frame louder than this RMS level (about -42 dBFS) counts as speech. Room noise
+/// on a laptop microphone sits well below it; quiet speech sits above it.
+pub const SPEECH_RMS: f32 = 0.008;
+/// Kept around the speech so soft word starts and endings aren't clipped.
+const PADDING_MS: u32 = 200;
+
+/// Trims leading and trailing silence with a simple energy-based voice-activity
+/// check. Returns `None` if no frame is loud enough to be speech.
+#[must_use]
+pub fn trim_silence(audio: &Audio) -> Option<Audio> {
+    let frame = usize::try_from(audio.sample_rate * FRAME_MS / 1000)
+        .unwrap_or(1)
+        .max(1);
+    let padding = usize::try_from(audio.sample_rate * PADDING_MS / 1000).unwrap_or(0);
+    let loud = |chunk: &[f32]| rms(chunk) > SPEECH_RMS;
+    let first = audio.samples.chunks(frame).position(loud)?;
+    let last = audio.samples.chunks(frame).rposition(loud)?;
+    let start = (first * frame).saturating_sub(padding);
+    let end = ((last + 1) * frame + padding).min(audio.samples.len());
+    Some(Audio {
+        samples: audio.samples[start..end].to_vec(),
+        sample_rate: audio.sample_rate,
+    })
+}
+
+/// The root mean square level of `samples`.
+fn rms(samples: &[f32]) -> f32 {
+    let squares: f64 = samples.iter().map(|s| f64::from(*s).powi(2)).sum();
+    narrow((squares / index_to_f64(samples.len().max(1))).sqrt())
+}
+
 /// `ceil(len * to / from)`, computed in integers.
 fn output_length(len: usize, from_rate: u32, to_rate: u32) -> usize {
     let scaled = (len as u128) * u128::from(to_rate);
@@ -145,6 +178,49 @@ mod tests {
         assert!(is_too_short(&audio(0)));
         assert!(is_too_short(&audio(4_799)));
         assert!(!is_too_short(&audio(4_800)));
+    }
+
+    /// A 440 Hz tone, `len` samples long at 16 kHz.
+    fn tone(len: usize) -> Vec<f32> {
+        (0..len)
+            .map(|i| {
+                narrow(0.3 * (index_to_f64(i) * 440.0 * std::f64::consts::TAU / 16_000.0).sin())
+            })
+            .collect()
+    }
+
+    fn clip(samples: Vec<f32>) -> Audio {
+        Audio {
+            samples,
+            sample_rate: WHISPER_SAMPLE_RATE,
+        }
+    }
+
+    #[test]
+    fn silence_has_no_speech() {
+        assert_eq!(trim_silence(&clip(vec![0.0; 16_000])), None);
+        assert_eq!(trim_silence(&clip(vec![0.004; 16_000])), None, "room noise");
+        assert_eq!(trim_silence(&clip(Vec::new())), None);
+    }
+
+    #[test]
+    fn a_tone_is_kept_whole() {
+        let audio = clip(tone(16_000));
+
+        assert_eq!(trim_silence(&audio), Some(audio));
+    }
+
+    #[test]
+    fn silence_around_speech_is_trimmed_with_padding() {
+        let samples = [vec![0.0; 32_000], tone(8_000), vec![0.0; 32_000]].concat();
+
+        let trimmed = trim_silence(&clip(samples)).unwrap();
+
+        // 0.5 s of tone, 0.2 s of padding on each side, rounded out to 30 ms frames.
+        let len = trimmed.samples.len();
+        assert!((14_400..=15_400).contains(&len), "{len}");
+        assert!(trimmed.samples[..3_000].iter().all(|s| *s == 0.0));
+        assert_eq!(trimmed.sample_rate, WHISPER_SAMPLE_RATE);
     }
 
     #[test]

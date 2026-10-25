@@ -13,6 +13,10 @@ sha2 = "0.11"
 # Model downloads only. Native TLS uses the OS certificate store.
 ureq = { version = "3.5", default-features = false, features = ["native-tls-no-default"] }
 toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "serde"] }
+# Logs record event kinds and timings only, never user content (see app::runtime).
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 
 [lints.rust]
 # Deny, not forbid, so platform modules can opt in with `#![allow(unsafe_code)]`.

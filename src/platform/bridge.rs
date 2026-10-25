@@ -19,6 +19,8 @@ pub enum Signal {
     Menu(String),
     /// A download's progress or result.
     Model(Model, ModelStatus),
+    /// The audio device went away while recording.
+    MicrophoneLost,
 }
 
 /// What a signal asks for.
@@ -35,20 +37,26 @@ pub enum Route {
 }
 
 /// Maps `signal` given the registered hotkey ids, or `None` if it should be ignored
-/// (a key release, or an id fluentb didn't register).
+/// (an id fluentb didn't register, or a menu entry it didn't create).
 #[must_use]
 pub fn route(signal: &Signal, hotkeys: &[(u32, Hotkey)]) -> Option<Route> {
     match signal {
-        Signal::Hotkey { pressed: false, .. } => None,
-        Signal::Hotkey { id, .. } => hotkeys
+        Signal::Hotkey { id, pressed } => hotkeys
             .iter()
             .find(|(registered, _)| registered == id)
-            .map(|(_, hotkey)| Route::Input(InputEvent::HotkeyPressed(*hotkey))),
+            .map(|(_, hotkey)| {
+                Route::Input(if *pressed {
+                    InputEvent::HotkeyPressed(*hotkey)
+                } else {
+                    InputEvent::HotkeyReleased(*hotkey)
+                })
+            }),
         Signal::Menu(id) => MenuAction::from_id(id).map(|action| match action {
             MenuAction::Quit => Route::Input(InputEvent::QuitRequested),
             other => Route::Action(other),
         }),
         Signal::Model(model, status) => Some(Route::Model(*model, status.clone())),
+        Signal::MicrophoneLost => Some(Route::Input(InputEvent::MicrophoneLost)),
     }
 }
 
@@ -122,7 +130,11 @@ mod tests {
                     id: 7,
                     pressed: false,
                 },
-                None,
+                Some(Route::Input(InputEvent::HotkeyReleased(Hotkey::Dictate))),
+            ),
+            (
+                Signal::MicrophoneLost,
+                Some(Route::Input(InputEvent::MicrophoneLost)),
             ),
             (
                 Signal::Hotkey {
@@ -160,7 +172,7 @@ mod tests {
         let (sender, signals) = mpsc::channel();
         [
             Signal::Hotkey {
-                id: 7,
+                id: 8,
                 pressed: false,
             },
             Signal::Menu("about".into()),

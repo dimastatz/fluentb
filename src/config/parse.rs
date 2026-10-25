@@ -10,7 +10,13 @@ type Warnings = Vec<ConfigWarning>;
 const SUPPORTED_VERSION: i64 = 1;
 const TOP_LEVEL_KEYS: [&str; 4] = ["version", "hotkeys", "dictation", "rewrite"];
 const HOTKEY_KEYS: [&str; 2] = ["dictate", "rewrite"];
-const DICTATION_KEYS: [&str; 3] = ["model", "language", "mode"];
+const DICTATION_KEYS: [&str; 5] = [
+    "model",
+    "language",
+    "mode",
+    "sounds",
+    "max_recording_seconds",
+];
 const REWRITE_KEYS: [&str; 5] = [
     "style",
     "model",
@@ -73,6 +79,18 @@ fn from_table(root: &Table, defaults: Config, os: Os) -> (Config, Warnings) {
         defaults.dictation.mode,
         str::parse,
     );
+    let (sounds, sounds_warnings) = value_field(
+        dictation_table,
+        "dictation.sounds",
+        defaults.dictation.sounds,
+        boolean,
+    );
+    let (max_recording_seconds, max_recording_warnings) = value_field(
+        dictation_table,
+        "dictation.max_recording_seconds",
+        defaults.dictation.max_recording_seconds,
+        |value| positive(value, 60 * 60),
+    );
     let (rewrite, rewrite_settings_warnings) = rewrite_settings(rewrite_table, defaults.rewrite);
 
     let config = Config {
@@ -81,6 +99,8 @@ fn from_table(root: &Table, defaults: Config, os: Os) -> (Config, Warnings) {
             model,
             language,
             mode,
+            sounds,
+            max_recording_seconds,
         },
         rewrite,
     };
@@ -95,6 +115,8 @@ fn from_table(root: &Table, defaults: Config, os: Os) -> (Config, Warnings) {
         whisper_warnings,
         language_warnings,
         mode_warnings,
+        sounds_warnings,
+        max_recording_warnings,
         rewrite_section,
         rewrite_settings_warnings,
     ]
@@ -277,6 +299,8 @@ mod tests {
             model = "small"
             language = "he"
             mode = "push-to-talk"
+            sounds = false
+            max_recording_seconds = 300
 
             [rewrite]
             style = "concise"
@@ -307,6 +331,8 @@ mod tests {
                 }),
                 language: Language::Code("he".into()),
                 mode: DictationMode::PushToTalk,
+                sounds: false,
+                max_recording_seconds: 300,
             }
         );
         assert_eq!(
@@ -365,6 +391,8 @@ mod tests {
             [dictation]
             language = "english"
             mode = "hold"
+            sounds = 1
+            max_recording_seconds = 0
 
             [rewrite]
             style = "pirate"
@@ -389,6 +417,11 @@ mod tests {
                 invalid(
                     "dictation.mode",
                     "unknown mode \"hold\" (expected toggle or push-to-talk)"
+                ),
+                invalid("dictation.sounds", "expected true or false"),
+                invalid(
+                    "dictation.max_recording_seconds",
+                    "expected a whole number from 1 to 3600"
                 ),
                 invalid(
                     "rewrite.style",

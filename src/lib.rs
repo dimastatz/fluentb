@@ -4,6 +4,7 @@ pub mod audio;
 pub mod config;
 pub mod download;
 pub mod facade;
+pub mod logging;
 pub mod models;
 pub mod onboarding;
 pub mod platform;

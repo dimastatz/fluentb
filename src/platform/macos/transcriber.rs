@@ -5,8 +5,10 @@ use crate::config::{Language, WhisperModel};
 use crate::facade::{Audio, FacadeError, Result};
 use crate::models::{self, Model};
 use crate::transcript;
+use std::ffi::c_void;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -59,7 +61,9 @@ impl Transcriber {
             .ok_or_else(|| FacadeError::Transcription("the speech model isn't loaded".into()))
     }
 
-    pub fn transcribe(&mut self, audio: &Audio) -> Result<String> {
+    /// Transcribes `audio`, stopping early with [`FacadeError::Cancelled`] once
+    /// `cancel` is set.
+    pub fn transcribe(&mut self, audio: &Audio, cancel: &Arc<AtomicBool>) -> Result<String> {
         if audio::is_too_short(audio) {
             return Ok(String::new());
         }
@@ -74,7 +78,17 @@ impl Transcriber {
         params.set_print_progress(false);
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
-        state.full(params, &audio.samples).map_err(transcription)?;
+        // SAFETY: `aborted` only reads the flag, which `cancel` keeps alive until
+        // `full` returns. (The `_safe` variant leaks its closure on every call.)
+        unsafe {
+            params.set_abort_callback(Some(aborted));
+            params.set_abort_callback_user_data(Arc::as_ptr(cancel).cast_mut().cast::<c_void>());
+        }
+        let result = state.full(params, &audio.samples);
+        if cancel.load(Ordering::Relaxed) {
+            return Err(FacadeError::Cancelled);
+        }
+        result.map_err(transcription)?;
         let segments = state
             .as_iter()
             .map(|segment| segment.to_str_lossy().map(std::borrow::Cow::into_owned))
@@ -82,6 +96,12 @@ impl Transcriber {
             .map_err(transcription)?;
         Ok(transcript::clean(segments.iter().map(String::as_str)))
     }
+}
+
+/// whisper.cpp's abort check: whether Esc was pressed. `flag` is an `AtomicBool`.
+unsafe extern "C" fn aborted(flag: *mut c_void) -> bool {
+    // SAFETY: `transcribe` passes a pointer to an `AtomicBool` that outlives `full`.
+    unsafe { (*flag.cast::<AtomicBool>()).load(Ordering::Relaxed) }
 }
 
 /// The model file, or an error telling the user where to put it.
@@ -169,7 +189,9 @@ mod tests {
             sample_rate: audio::WHISPER_SAMPLE_RATE,
         };
 
-        let text = transcriber.transcribe(&audio).unwrap();
+        let text = transcriber
+            .transcribe(&audio, &Arc::new(AtomicBool::new(false)))
+            .unwrap();
 
         assert_eq!(text, "Please send the report by Friday.");
     }
@@ -182,6 +204,9 @@ mod tests {
             sample_rate: audio::WHISPER_SAMPLE_RATE,
         };
 
-        assert_eq!(transcriber.transcribe(&audio), Ok(String::new()));
+        assert_eq!(
+            transcriber.transcribe(&audio, &Arc::new(AtomicBool::new(false))),
+            Ok(String::new())
+        );
     }
 }

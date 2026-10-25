@@ -39,6 +39,14 @@ pub struct Dictation {
     pub model: Choice<WhisperModel>,
     pub language: Language,
     pub mode: DictationMode,
+    /// Play a short sound when recording starts and stops.
+    pub sounds: bool,
+    /// Recording stops on its own after this many seconds.
+    pub max_recording_seconds: u32,
+}
+
+impl Dictation {
+    pub const DEFAULT_MAX_RECORDING_SECONDS: u32 = 120;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +76,8 @@ impl Config {
                 model: Choice::Auto,
                 language: Language::Auto,
                 mode: DictationMode::Toggle,
+                sounds: true,
+                max_recording_seconds: Dictation::DEFAULT_MAX_RECORDING_SECONDS,
             },
             rewrite: Rewrite {
                 style: Style::Neutral,

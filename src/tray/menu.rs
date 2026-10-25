@@ -16,6 +16,10 @@ pub enum MenuAction {
     RemoveUnusedModels,
     /// Open System Settings where this permission is granted.
     FixPermission(Permission),
+    /// Turn starting fluentb at login on or off.
+    ToggleLaunchAtLogin,
+    /// Show the log folder.
+    RevealLogs,
 }
 
 impl MenuAction {
@@ -29,6 +33,8 @@ impl MenuAction {
             Self::RemoveUnusedModels => "remove-unused-models".into(),
             Self::FixPermission(Permission::Microphone) => "fix:microphone".into(),
             Self::FixPermission(Permission::Accessibility) => "fix:accessibility".into(),
+            Self::ToggleLaunchAtLogin => "launch-at-login".into(),
+            Self::RevealLogs => "reveal-logs".into(),
         }
     }
 
@@ -47,6 +53,8 @@ impl MenuAction {
             "remove-unused-models" => Some(Self::RemoveUnusedModels),
             "fix:microphone" => Some(Self::FixPermission(Permission::Microphone)),
             "fix:accessibility" => Some(Self::FixPermission(Permission::Accessibility)),
+            "launch-at-login" => Some(Self::ToggleLaunchAtLogin),
+            "reveal-logs" => Some(Self::RevealLogs),
             other => other
                 .strip_prefix("model:")
                 .and_then(model)
@@ -94,6 +102,7 @@ pub struct MenuState {
     pub rewrite: Model,
     /// Permissions the user hasn't granted.
     pub missing: Vec<Permission>,
+    pub launch_at_login: bool,
 }
 
 /// Builds the menu for `state`, with the hotkeys from `config` written the way `os`
@@ -126,8 +135,14 @@ pub fn menu_model(config: &Config, state: &MenuState, os: Os) -> MenuModel {
             })
             .collect(),
     });
+    let launch_at_login = MenuEntry::Choice {
+        action: MenuAction::ToggleLaunchAtLogin,
+        title: "Launch at login".into(),
+        checked: state.launch_at_login,
+    };
     let actions = [
         (MenuAction::OpenConfig, "Open config…"),
+        (MenuAction::RevealLogs, "Reveal logs"),
         (MenuAction::Quit, "Quit fluentb"),
     ]
     .into_iter()
@@ -148,6 +163,7 @@ pub fn menu_model(config: &Config, state: &MenuState, os: Os) -> MenuModel {
                     title: "Remove unused models".into(),
                 },
                 MenuEntry::Separator,
+                launch_at_login,
             ])
             .chain(actions)
             .collect(),
@@ -204,6 +220,7 @@ const fn hotkey_name(hotkey: Hotkey) -> &'static str {
     match hotkey {
         Hotkey::Dictate => "Dictate",
         Hotkey::Rewrite => "Rewrite",
+        Hotkey::Cancel => "Cancel",
     }
 }
 
@@ -225,6 +242,7 @@ mod tests {
             speech: BASE_EN,
             rewrite: QWEN,
             missing: Vec::new(),
+            launch_at_login: false,
         }
     }
 
@@ -268,10 +286,32 @@ mod tests {
                 &MenuEntry::Separator,
                 &action(MenuAction::RemoveUnusedModels, "Remove unused models"),
                 &MenuEntry::Separator,
+                &MenuEntry::Choice {
+                    action: MenuAction::ToggleLaunchAtLogin,
+                    title: "Launch at login".into(),
+                    checked: false,
+                },
                 &action(MenuAction::OpenConfig, "Open config…"),
+                &action(MenuAction::RevealLogs, "Reveal logs"),
                 &action(MenuAction::Quit, "Quit fluentb"),
             ]
         );
+    }
+
+    #[test]
+    fn launch_at_login_is_checked_when_on() {
+        let state = MenuState {
+            launch_at_login: true,
+            ..state()
+        };
+
+        let menu = menu_model(&Config::defaults(Os::MacOs), &state, Os::MacOs);
+
+        assert!(menu.entries.contains(&MenuEntry::Choice {
+            action: MenuAction::ToggleLaunchAtLogin,
+            title: "Launch at login".into(),
+            checked: true,
+        }));
     }
 
     #[test]
@@ -381,6 +421,8 @@ mod tests {
             MenuAction::RemoveUnusedModels,
             MenuAction::FixPermission(Permission::Microphone),
             MenuAction::FixPermission(Permission::Accessibility),
+            MenuAction::ToggleLaunchAtLogin,
+            MenuAction::RevealLogs,
         ]
         .into_iter()
         .chain(
