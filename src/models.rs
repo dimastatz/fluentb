@@ -7,8 +7,6 @@ use std::path::PathBuf;
 const APP_DIR: &str = "fluentb";
 /// Suffix of a download in progress; it is renamed once its hash checks out.
 pub const PARTIAL_SUFFIX: &str = ".part";
-/// Below this much memory, `auto` picks the light rewrite model.
-const LIGHT_REWRITE_BELOW: u64 = 16 * 1024 * 1024 * 1024;
 const MODELS_DIR: &str = "models";
 
 /// A model fluentb runs locally.
@@ -85,7 +83,7 @@ const fn whisper(size: ModelSize, english_only: bool) -> Model {
 }
 
 /// Every model fluentb can download, with the sizes and hashes published upstream.
-pub const REGISTRY: [Entry; 12] = [
+pub const REGISTRY: [Entry; 13] = [
     Entry {
         model: whisper(ModelSize::Tiny, false),
         size: 77_691_713,
@@ -132,6 +130,16 @@ pub const REGISTRY: [Entry; 12] = [
         sha256: "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
     },
     Entry {
+        model: Model::Rewrite(RewriteModel::Qwen3_0_6B),
+        size: 396_705_472,
+        sha256: "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a",
+    },
+    Entry {
+        model: Model::Rewrite(RewriteModel::Qwen3_1_7B),
+        size: 1_107_409_472,
+        sha256: "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897",
+    },
+    Entry {
         model: Model::Rewrite(RewriteModel::Qwen3_4B),
         size: 2_497_280_256,
         sha256: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
@@ -140,11 +148,6 @@ pub const REGISTRY: [Entry; 12] = [
         model: Model::Rewrite(RewriteModel::Gemma3_4B),
         size: 2_489_757_856,
         sha256: "882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863",
-    },
-    Entry {
-        model: Model::Rewrite(RewriteModel::Qwen3_1_7B),
-        size: 1_107_409_472,
-        sha256: "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897",
     },
 ];
 
@@ -162,36 +165,25 @@ pub fn of_kind(kind: Kind) -> impl Iterator<Item = Model> {
         .filter(move |model| model.kind() == kind)
 }
 
-/// What fluentb knows about the machine when choosing models.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct System {
-    /// The preferred language, e.g. `en-US` or `he`.
-    pub language: Option<String>,
-    pub memory_bytes: Option<u64>,
-}
-
-/// The Whisper model to use: `base.en` on English systems, `base` otherwise.
+/// The Whisper model to use: `auto` is `tiny.en`, the smallest. fluentb targets
+/// English, and the larger models are opt-in.
 #[must_use]
-pub fn choose_whisper(choice: Choice<WhisperModel>, system: &System) -> WhisperModel {
+pub const fn choose_whisper(choice: Choice<WhisperModel>) -> WhisperModel {
     match choice {
         Choice::Fixed(model) => model,
         Choice::Auto => WhisperModel {
-            size: ModelSize::Base,
-            english_only: system
-                .language
-                .as_deref()
-                .is_none_or(|language| language.to_lowercase().starts_with("en")),
+            size: ModelSize::Tiny,
+            english_only: true,
         },
     }
 }
 
-/// The rewrite model to use: the light one on machines with under 16 GB of memory.
+/// The rewrite model to use: `auto` is `qwen3-0.6b`, the smallest.
 #[must_use]
-pub fn choose_rewrite(choice: Choice<RewriteModel>, system: &System) -> RewriteModel {
-    match (choice, system.memory_bytes) {
-        (Choice::Fixed(model), _) => model,
-        (Choice::Auto, Some(memory)) if memory < LIGHT_REWRITE_BELOW => RewriteModel::Qwen3_1_7B,
-        (Choice::Auto, _) => RewriteModel::Qwen3_4B,
+pub const fn choose_rewrite(choice: Choice<RewriteModel>) -> RewriteModel {
+    match choice {
+        Choice::Fixed(model) => model,
+        Choice::Auto => RewriteModel::Qwen3_0_6B,
     }
 }
 
@@ -245,6 +237,7 @@ pub fn unused_files(files: &[String], in_use: &[Model]) -> Vec<String> {
 /// The Hugging Face repository and file of each rewrite model (`Q4_K_M` quantization).
 const fn rewrite_source(model: RewriteModel) -> (&'static str, &'static str) {
     match model {
+        RewriteModel::Qwen3_0_6B => ("unsloth/Qwen3-0.6B-GGUF", "Qwen3-0.6B-Q4_K_M.gguf"),
         RewriteModel::Qwen3_4B => ("Qwen/Qwen3-4B-GGUF", "Qwen3-4B-Q4_K_M.gguf"),
         RewriteModel::Gemma3_4B => ("ggml-org/gemma-3-4b-it-GGUF", "gemma-3-4b-it-Q4_K_M.gguf"),
         RewriteModel::Qwen3_1_7B => ("unsloth/Qwen3-1.7B-GGUF", "Qwen3-1.7B-Q4_K_M.gguf"),
@@ -443,52 +436,22 @@ mod tests {
     }
 
     #[test]
-    fn auto_picks_models_for_the_machine() {
-        let system = |language: Option<&str>, gigabytes: Option<u64>| System {
-            language: language.map(str::to_owned),
-            memory_bytes: gigabytes.map(|gb| gb * 1024 * 1024 * 1024),
-        };
-        let base = WhisperModel {
-            size: ModelSize::Base,
-            english_only: false,
+    fn auto_picks_the_smallest_models() {
+        let tiny_en = WhisperModel {
+            size: ModelSize::Tiny,
+            english_only: true,
         };
 
+        assert_eq!(choose_whisper(Choice::Auto), tiny_en);
+        assert_eq!(choose_whisper(Choice::Fixed(LARGE)), LARGE);
+        assert_eq!(choose_rewrite(Choice::Auto), RewriteModel::Qwen3_0_6B);
         assert_eq!(
-            choose_whisper(Choice::Auto, &system(Some("en-US"), None)),
-            BASE_EN
-        );
-        assert_eq!(
-            choose_whisper(Choice::Auto, &system(Some("EN"), None)),
-            BASE_EN
-        );
-        assert_eq!(
-            choose_whisper(Choice::Auto, &system(Some("he-IL"), None)),
-            base
-        );
-        assert_eq!(choose_whisper(Choice::Auto, &system(None, None)), BASE_EN);
-        assert_eq!(
-            choose_whisper(Choice::Fixed(LARGE), &system(Some("en"), None)),
-            LARGE
-        );
-
-        assert_eq!(
-            choose_rewrite(Choice::Auto, &system(None, Some(8))),
-            RewriteModel::Qwen3_1_7B
-        );
-        assert_eq!(
-            choose_rewrite(Choice::Auto, &system(None, Some(16))),
-            RewriteModel::Qwen3_4B
-        );
-        assert_eq!(
-            choose_rewrite(Choice::Auto, &system(None, None)),
-            RewriteModel::Qwen3_4B
-        );
-        assert_eq!(
-            choose_rewrite(
-                Choice::Fixed(RewriteModel::Gemma3_4B),
-                &system(None, Some(8))
-            ),
+            choose_rewrite(Choice::Fixed(RewriteModel::Gemma3_4B)),
             RewriteModel::Gemma3_4B
+        );
+        assert_eq!(
+            Model::Rewrite(RewriteModel::Qwen3_0_6B).download_url(),
+            "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf"
         );
     }
 

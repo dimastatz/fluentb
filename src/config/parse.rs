@@ -429,7 +429,7 @@ mod tests {
                 ),
                 invalid(
                     "rewrite.model",
-                    "unknown rewrite model \"qwen2.5-3b\" (expected auto, qwen3-4b, gemma3-4b, or qwen3-1.7b)"
+                    "unknown rewrite model \"qwen2.5-3b\" (expected auto, qwen3-0.6b, qwen3-1.7b, qwen3-4b, or gemma3-4b)"
                 ),
                 invalid("rewrite.keep_loaded", "expected true or false"),
                 invalid(

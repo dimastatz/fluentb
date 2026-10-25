@@ -18,8 +18,8 @@ dictate = "Cmd+Shift+D"
 rewrite = "Cmd+Shift+R"
 
 [dictation]
-# auto (base.en on English systems, base otherwise), tiny, base, small, medium
-# (add .en for English only), or large-v3.
+# auto (tiny.en, the smallest), tiny, base, small, medium (add .en for English
+# only), or large-v3. Larger models are more accurate but slower.
 model = "auto"
 # "auto" or a two-letter language code such as "en", "he", or "de".
 language = "auto"
@@ -33,8 +33,8 @@ max_recording_seconds = 120
 [rewrite]
 # neutral, casual, formal, or concise.
 style = "neutral"
-# The local model that rewrites text: auto (qwen3-4b, or qwen3-1.7b on Macs with
-# less than 16 GB of memory), qwen3-4b, gemma3-4b, or qwen3-1.7b.
+# The local model that rewrites text: auto (qwen3-0.6b, the smallest), qwen3-0.6b,
+# qwen3-1.7b, qwen3-4b, or gemma3-4b. Larger models rewrite better.
 model = "auto"
 # The model is unloaded after this many idle minutes, to free memory.
 unload_after_minutes = 10

@@ -57,6 +57,7 @@ Make fluentb work out of the box: on first run, download and verify the Whisper 
 9. **Default model choice**
    - Whisper: `base.en` if the system language is English, otherwise `base`.
    - Rewrite: the default model, or the light model on machines with under 16 GB of RAM.
+   - *Changed after M6:* fluentb now targets English, and `auto` picks the smallest models, `tiny.en` and `qwen3-0.6b` (about 475 MB together), on every machine. See `eval/rewrite/RESULTS.md`.
 10. **Permission status** in the tray menu: "⚠ Accessibility not granted — Fix…" while missing.
 
 ### Non-functional
@@ -92,7 +93,7 @@ Make fluentb work out of the box: on first run, download and verify the Whisper 
 
 Decisions made while building M6:
 
-- **Registry:** `models::REGISTRY` lists all 12 models (9 Whisper, 3 rewrite) with the size and SHA-256 that Hugging Face publishes for each file. `Model` gives each one's id, file name and URL. Pure helpers, all tested:
+- **Registry:** `models::REGISTRY` lists every model (9 Whisper and, since then, 4 rewrite) with the size and SHA-256 that Hugging Face publishes for each file. `Model` gives each one's id, file name and URL. Pure helpers, all tested:
   - `pending` lists what still needs downloading, speech first;
   - `is_complete` treats a file of the exact size as installed (hashes are checked when downloading);
   - `unused_files` finds removable files, including unfinished downloads;

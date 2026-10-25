@@ -1,5 +1,5 @@
 # Inputs for comparing rewrite models (docs/specs/m05-rewrite.md, "Model evaluation").
-# Run: FLUENTB_EVAL_MODEL=qwen3-4b cargo test --release --lib rewrite_eval -- --ignored --nocapture
+# Run: FLUENTB_EVAL_MODEL=qwen3-0.6b cargo test --release --lib rewrite_eval -- --ignored --nocapture
 
 [[sample]]
 language = "en"

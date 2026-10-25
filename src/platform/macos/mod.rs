@@ -18,7 +18,6 @@ mod permissions;
 mod recorder;
 mod rewriter;
 mod selection;
-mod system;
 mod transcriber;
 mod tray;
 
@@ -87,9 +86,8 @@ pub fn run() -> ! {
     // Held until the process exits; the OS releases the lock then.
     let _instance = single_instance(config_path.as_deref());
     let (config, warnings) = config::load(config_path.as_deref(), Os::current());
-    let system = system::detect();
-    let speech = models::choose_whisper(config.dictation.model, &system);
-    let rewrite = models::choose_rewrite(config.rewrite.model, &system);
+    let speech = models::choose_whisper(config.dictation.model);
+    let rewrite = models::choose_rewrite(config.rewrite.model);
     let models_dir = models::default_dir();
     let pending = models::pending(
         &[Model::Whisper(speech), Model::Rewrite(rewrite)],

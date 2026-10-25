@@ -18,6 +18,7 @@
 - [Project status](#project-status)
 - [Getting started](#getting-started)
 - [Usage](#usage)
+- [Models](#models)
 - [Architecture](#architecture)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -34,7 +35,7 @@ It is built in Rust, lives in your system tray, and stays out of your way: no ma
 - **Dictate:** speak and have the transcription typed straight into the focused text field.
 - **Rewrite:** select text you've written and replace it with a clean, fluent version in the style you choose (neutral, casual, formal, concise).
 - **Works everywhere:** any app with a text field. No plugins or integrations needed.
-- **Multilingual:** transcription and rewrite keep the language you write in.
+- **Small by default:** fluentb targets English and downloads about 475 MB of models on first run. Larger, more accurate models (including multilingual ones) are one menu click away.
 - **System tray app:** shows its state (idle, recording, busy) and offers a small menu.
 
 ## Privacy
@@ -45,14 +46,14 @@ Everything runs on your machine:
 - **Rewrite** uses a local language model through [llama.cpp](https://github.com/ggerganov/llama.cpp).
 - Your audio and text are never sent anywhere. The only network traffic is downloading the models on first run (or when you switch models) and an optional update check. Downloads are plain requests to Hugging Face and send nothing about you:
   - Speech: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-<model>.bin`
-  - Rewrite: `https://huggingface.co/Qwen/Qwen3-4B-GGUF/…`, `ggml-org/gemma-3-4b-it-GGUF/…` and `unsloth/Qwen3-1.7B-GGUF/…`
+  - Rewrite: `https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/…`, `unsloth/Qwen3-1.7B-GGUF/…`, `Qwen/Qwen3-4B-GGUF/…` and `ggml-org/gemma-3-4b-it-GGUF/…`
 
   Each file is checked against its published SHA-256 before use. The full list is in [`src/models.rs`](src/models.rs).
 - Logs record events and timings only, never what you said or wrote.
 
 ## Project status
 
-fluentb is in **early development**. On macOS, it runs in the menu bar, downloads its models on first run, and both hotkeys work. Dictation types what you say into the focused app, and rewrite replaces the selected text with a polished version from a local model. Polish (M7) and a signed app (M8) are next.
+fluentb is in **early development**. On macOS, it runs in the menu bar, downloads its models on first run, and both hotkeys work. Dictation types what you say into the focused app, and rewrite replaces the selected text with a polished version from a local model. Polish (M7: push-to-talk, Esc to cancel, sounds, logs, launch at login) is in review, and a signed app (M8) is next.
 
 | Platform | Status    |
 | -------- | --------- |
@@ -82,7 +83,7 @@ cargo build --release
 2. On first run, fluentb:
    - shows a welcome notification;
    - asks for **Microphone** and **Accessibility** access (allow both for your terminal app; Accessibility is needed to read and type text in other apps);
-   - downloads its models in the background: the speech model (about 150 MB) first, then the rewrite model (about 2.5 GB, or 1.1 GB on Macs with less than 16 GB of memory).
+   - downloads its [models](#models) in the background, about 475 MB in all: the speech model (78 MB) first, then the rewrite model (397 MB).
 
    The menu shows the progress, and a notification says when each hotkey is ready.
 3. **Dictate:** click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
@@ -108,7 +109,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo llvm-cov --locked --all-targets --ignore-filename-regex 'src/main\.rs|src/platform/macos/' --fail-under-lines 95
 cargo deny check                                              # cargo install cargo-deny
 cargo machete                                                 # cargo install cargo-machete
-cargo test -- --ignored   # real Whisper transcription; needs the model downloaded
+cargo test --release -- --ignored   # real transcription and rewrite; needs the default models downloaded
 ```
 
 The tools come from `cargo install cargo-llvm-cov cargo-deny cargo-machete`. Coverage excludes the macOS glue (`src/main.rs`, `src/platform/macos/`), which is tested by hand.
@@ -141,19 +142,42 @@ dictate = "Cmd+Shift+D"
 rewrite = "Cmd+Shift+R"
 
 [dictation]
-model = "auto"        # base.en on English systems, base otherwise; or tiny, small, medium (optionally .en), large-v3
+model = "auto"        # tiny.en; or tiny, base, small, medium (optionally .en), large-v3
 language = "auto"     # or a two-letter code such as "en" or "he"
 mode = "toggle"       # or "push-to-talk"
+sounds = true         # a short sound when recording starts and stops
+max_recording_seconds = 120
 
 [rewrite]
 style = "neutral"     # neutral, casual, formal, or concise
-model = "auto"        # qwen3-4b, or qwen3-1.7b under 16 GB of memory; or gemma3-4b
+model = "auto"        # qwen3-0.6b; or qwen3-1.7b, qwen3-4b, gemma3-4b
 unload_after_minutes = 10  # free the model's memory when idle
 keep_loaded = false
 max_characters = 4000
 ```
 
 Any missing or invalid setting falls back to its default, and fluentb shows one notification at startup listing every problem.
+
+## Models
+
+fluentb targets **English** and, to keep the download small, uses the smallest models by default:
+
+| | Default | Size | Source (Hugging Face) | Licence |
+| --- | --- | --- | --- | --- |
+| Speech | `tiny.en` (Whisper, English only) | 78 MB | `ggerganov/whisper.cpp` | MIT |
+| Rewrite | `qwen3-0.6b` (Qwen3 0.6B, Q4_K_M) | 397 MB | `unsloth/Qwen3-0.6B-GGUF` | Apache 2.0 |
+
+That's about **475 MB** on first run. The small models are fast (a rewrite takes well under a second on Apple Silicon), but they are less accurate. In particular, `qwen3-0.6b` sometimes drops part of a sentence when it rewrites; see [the evaluation](eval/rewrite/RESULTS.md). If that matters to you, switch to a larger model from the tray menu, or set `model` in `config.toml`:
+
+| Speech | Size | Rewrite | Size |
+| --- | --- | --- | --- |
+| `tiny` (multilingual) | 78 MB | `qwen3-1.7b` | 1.1 GB |
+| `base`, `base.en` | 148 MB | | |
+| `small`, `small.en` | 488 MB | `qwen3-4b` (best quality) | 2.5 GB |
+| `medium`, `medium.en` | 1.5 GB | `gemma3-4b` | 2.5 GB |
+| `large-v3` (multilingual) | 3.1 GB | | |
+
+A model is downloaded only when you choose it, and "Remove unused models" in the menu deletes the ones you no longer use. Models live in `~/Library/Application Support/fluentb/models/`.
 
 ## Architecture
 

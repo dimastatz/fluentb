@@ -37,7 +37,9 @@ pub struct Prompt {
 #[must_use]
 pub const fn template(model: RewriteModel) -> ChatTemplate {
     match model {
-        RewriteModel::Qwen3_4B | RewriteModel::Qwen3_1_7B => ChatTemplate::ChatMl,
+        RewriteModel::Qwen3_0_6B | RewriteModel::Qwen3_1_7B | RewriteModel::Qwen3_4B => {
+            ChatTemplate::ChatMl
+        }
         RewriteModel::Gemma3_4B => ChatTemplate::Gemma,
     }
 }
@@ -123,6 +125,7 @@ mod tests {
             "<|im_start|>user\n<text>\n{TEXT}\n</text><|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
         ));
         assert_eq!(template(RewriteModel::Qwen3_1_7B), ChatTemplate::ChatMl);
+        assert_eq!(template(RewriteModel::Qwen3_0_6B), ChatTemplate::ChatMl);
     }
 
     #[test]
