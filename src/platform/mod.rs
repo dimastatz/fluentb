@@ -17,7 +17,6 @@ pub mod keymap;
 pub mod login;
 #[cfg(target_os = "macos")]
 pub mod macos;
-pub mod system;
 pub mod timers;
 
 /// Starts fluentb with the adapter for the OS this binary was built for.

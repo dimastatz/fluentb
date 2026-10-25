@@ -137,15 +137,12 @@ fn transcription(error: impl std::fmt::Display) -> FacadeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ModelSize;
+    use crate::config::Choice;
     use std::process::Command;
 
+    /// The default model, `tiny.en`.
     fn transcriber() -> Transcriber {
-        let base_en = WhisperModel {
-            size: ModelSize::Base,
-            english_only: true,
-        };
-        Transcriber::new(base_en, &Language::Auto)
+        Transcriber::new(models::choose_whisper(Choice::Auto), &Language::Auto)
     }
 
     /// Speaks a sentence with `say`, converts it to 16 kHz mono float WAV, and returns

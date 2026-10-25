@@ -206,11 +206,11 @@ mod tests {
         Rewriter::new(model, &Config::defaults(Os::MacOs).rewrite)
     }
 
-    /// Needs the light model downloaded; run with `cargo test --release -- --ignored`.
+    /// Needs the default model downloaded; run with `cargo test --release -- --ignored`.
     #[test]
     #[ignore = "needs the rewrite model downloaded"]
     fn rewrites_with_a_real_model() {
-        let mut rewriter = rewriter(RewriteModel::Qwen3_1_7B);
+        let mut rewriter = rewriter(models::choose_rewrite(crate::config::Choice::Auto));
 
         let text = rewriter
             .rewrite(
@@ -225,12 +225,12 @@ mod tests {
     }
 
     /// Rewrites every sample in `eval/rewrite/samples.toml` with the model named by
-    /// `FLUENTB_EVAL_MODEL` (default `qwen3-4b`) and prints the results for review.
+    /// `FLUENTB_EVAL_MODEL` (default `qwen3-0.6b`) and prints the results for review.
     #[test]
     #[ignore = "manual model evaluation; needs the model downloaded"]
     fn rewrite_eval() {
         let model: RewriteModel = std::env::var("FLUENTB_EVAL_MODEL")
-            .unwrap_or_else(|_| "qwen3-4b".into())
+            .unwrap_or_else(|_| "qwen3-0.6b".into())
             .parse()
             .unwrap();
         let samples = std::fs::read_to_string(

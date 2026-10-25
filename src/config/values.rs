@@ -73,11 +73,13 @@ pub enum DictationMode {
 /// The local language model that rewrites text. All run on-device with llama.cpp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RewriteModel {
-    /// Qwen3 4B: the default. Apache 2.0.
+    /// Qwen3 0.6B: the default, about 400 MB. Good enough for English. Apache 2.0.
+    Qwen3_0_6B,
+    /// Qwen3 4B: the most capable. Apache 2.0.
     Qwen3_4B,
     /// Gemma 3 4B: strong multilingual rewriting. Gemma Terms of Use.
     Gemma3_4B,
-    /// Qwen3 1.7B: the light option for Macs with less memory. Apache 2.0.
+    /// Qwen3 1.7B: a middle ground. Apache 2.0.
     Qwen3_1_7B,
 }
 
@@ -111,12 +113,18 @@ impl ModelSize {
 }
 
 impl RewriteModel {
-    pub const ALL: [Self; 3] = [Self::Qwen3_4B, Self::Gemma3_4B, Self::Qwen3_1_7B];
+    pub const ALL: [Self; 4] = [
+        Self::Qwen3_0_6B,
+        Self::Qwen3_1_7B,
+        Self::Qwen3_4B,
+        Self::Gemma3_4B,
+    ];
 
     /// The name used in the config file.
     #[must_use]
     pub const fn id(self) -> &'static str {
         match self {
+            Self::Qwen3_0_6B => "qwen3-0.6b",
             Self::Qwen3_4B => "qwen3-4b",
             Self::Gemma3_4B => "gemma3-4b",
             Self::Qwen3_1_7B => "qwen3-1.7b",
@@ -138,7 +146,10 @@ impl FromStr for RewriteModel {
             .into_iter()
             .find(|model| model.id() == text)
             .ok_or_else(|| {
-                format!("unknown rewrite model \"{text}\" (expected qwen3-4b, gemma3-4b, or qwen3-1.7b)")
+                format!(
+                    "unknown rewrite model \"{text}\" \
+                     (expected qwen3-0.6b, qwen3-1.7b, qwen3-4b, or gemma3-4b)"
+                )
             })
     }
 }
@@ -270,7 +281,7 @@ mod tests {
         assert!("big"
             .parse::<Choice<RewriteModel>>()
             .unwrap_err()
-            .ends_with("(expected auto, qwen3-4b, gemma3-4b, or qwen3-1.7b)"));
+            .ends_with("(expected auto, qwen3-0.6b, qwen3-1.7b, qwen3-4b, or gemma3-4b)"));
     }
 
     #[test]

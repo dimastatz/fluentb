@@ -330,6 +330,16 @@ mod tests {
             rewrite,
             [
                 MenuEntry::Choice {
+                    action: MenuAction::SelectModel(Model::Rewrite(RewriteModel::Qwen3_0_6B)),
+                    title: "qwen3-0.6b (397 MB)".into(),
+                    checked: false,
+                },
+                MenuEntry::Choice {
+                    action: MenuAction::SelectModel(Model::Rewrite(RewriteModel::Qwen3_1_7B)),
+                    title: "qwen3-1.7b (1.1 GB)".into(),
+                    checked: false,
+                },
+                MenuEntry::Choice {
                     action: MenuAction::SelectModel(QWEN),
                     title: "qwen3-4b (2.5 GB)".into(),
                     checked: true,
@@ -337,11 +347,6 @@ mod tests {
                 MenuEntry::Choice {
                     action: MenuAction::SelectModel(Model::Rewrite(RewriteModel::Gemma3_4B)),
                     title: "gemma3-4b (2.5 GB)".into(),
-                    checked: false,
-                },
-                MenuEntry::Choice {
-                    action: MenuAction::SelectModel(Model::Rewrite(RewriteModel::Qwen3_1_7B)),
-                    title: "qwen3-1.7b (1.1 GB)".into(),
                     checked: false,
                 },
             ]
