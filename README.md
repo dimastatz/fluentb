@@ -33,7 +33,7 @@ It is built in Rust, lives in your system tray, and stays out of your way: no ma
 ## Features
 
 - **Dictate:** speak and have the transcription typed straight into the focused text field.
-- **Rewrite:** select text you've written and replace it with a clean, fluent version in the style you choose (neutral, casual, formal, concise).
+- **Rewrite:** select text you've written and replace it with a clean, fluent version in the style you choose (neutral, casual, formal, concise, or technical for engineers and architects).
 - **Works everywhere:** any app with a text field. No plugins or integrations needed.
 - **Small by default:** fluentb targets English and downloads about 1.2 GB of models on first run. Larger, more accurate models (including multilingual ones) are one menu click away.
 - **System tray app:** the fluentb bird sits in the menu bar and shows what it's doing: red with sound waves while it listens, thinking while it transcribes, holding its pencil while it rewrites.
@@ -149,7 +149,7 @@ sounds = true         # a short sound when recording starts and stops
 max_recording_seconds = 120
 
 [rewrite]
-style = "neutral"     # neutral (clear, concise, warm), casual, formal, or concise
+style = "neutral"     # neutral (clear, concise, warm), casual, formal, concise, or technical
 model = "auto"        # qwen3-1.7b; or qwen3-0.6b, qwen3-4b, gemma3-4b
 unload_after_minutes = 10  # free the model's memory when idle
 keep_loaded = false

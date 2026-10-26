@@ -46,6 +46,16 @@ Measured on Apple Silicon with Metal, Q4_K_M quantization, neutral style, and `t
 - ✗ Rewrote the injection sample as "write a poem about cats". It didn't obey, but it didn't keep the text either.
 - Broke down on Hebrew (mixed in Russian and English words). That's acceptable only because non-English is out of scope.
 
+## Technical style (issue #22)
+
+`style = "technical"` is for engineers and architects: short, precise sentences, the right technical terms, three or more steps as a numbered list, and questions and requests kept as they are. Two worked examples are shown only for this style (`rewrite::prompt::TECHNICAL_EXAMPLES`): run-on steps turned into a numbered list, and a technical question kept as a question. The other styles' prompts are unchanged. Run it with `FLUENTB_EVAL_STYLE=technical`.
+
+Measured on the English samples, including two new technical ones:
+
+- **Qwen3-1.7B:** turned the run-on deploy instructions into a numbered list, and wrote "API", "asynchronous", "retry mechanisms", "idempotency key" and "Grafana". Questions and requests were kept. ✗ It renamed the "todo for release:" heading to "To release:", borrowing from its example.
+- **Qwen3-4B:** the same, plus it kept the list heading exactly and spelled "prod" as "production".
+- **Wording matters:** "lead with the main point" made Qwen3-1.7B answer the deployment question and drop the request from a chat message, so it was removed. Rules alone didn't produce lists; the example did.
+
 ## Grammar-fixing prompt (issue #18)
 
 Issue #18 reported a rewrite that kept broken grammar ("Push I want, and make a plan."). The sample set gained four broken-grammar samples and two held-out word-order samples, and the prompt changed:

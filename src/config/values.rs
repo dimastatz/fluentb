@@ -90,6 +90,8 @@ pub enum Style {
     Casual,
     Formal,
     Concise,
+    /// For engineers and architects: structured, precise, with technical terms.
+    Technical,
 }
 
 impl ModelSize {
@@ -222,8 +224,9 @@ impl FromStr for Style {
             "casual" => Ok(Self::Casual),
             "formal" => Ok(Self::Formal),
             "concise" => Ok(Self::Concise),
+            "technical" => Ok(Self::Technical),
             _ => Err(format!(
-                "unknown style \"{text}\" (expected neutral, casual, formal, or concise)"
+                "unknown style \"{text}\" (expected neutral, casual, formal, concise, or technical)"
             )),
         }
     }
@@ -315,6 +318,7 @@ mod tests {
             ("casual", Style::Casual),
             ("formal", Style::Formal),
             ("concise", Style::Concise),
+            ("technical", Style::Technical),
         ];
         styles
             .into_iter()

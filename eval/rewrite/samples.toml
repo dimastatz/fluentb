@@ -118,3 +118,13 @@ text = "coffee i want and then go to the meeting"
 language = "en"
 kind = "word order"
 text = "the tests you run please and send me result"
+
+[[sample]]
+language = "en"
+kind = "technical"
+text = "so the problem is the api gateway times out after 30 sec but the report service sometimes take 2 min, i think we should make it async, put job in queue and client poll the status endpoint or we get webhook, also need retry and idempotency key so we dont generate twice"
+
+[[sample]]
+language = "en"
+kind = "technical"
+text = "deploy steps: first bump the helm chart version then run the migrations on staging check grafana for errors and if all good promote to prod. dont forget rollback plan"
