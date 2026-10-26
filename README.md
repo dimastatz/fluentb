@@ -36,7 +36,7 @@ It is built in Rust, lives in your system tray, and stays out of your way: no ma
 - **Rewrite:** select text you've written and replace it with a clean, fluent version in the style you choose (neutral, casual, formal, concise).
 - **Works everywhere:** any app with a text field. No plugins or integrations needed.
 - **Small by default:** fluentb targets English and downloads about 1.2 GB of models on first run. Larger, more accurate models (including multilingual ones) are one menu click away.
-- **System tray app:** shows its state (idle, recording, busy) and offers a small menu.
+- **System tray app:** the fluentb bird sits in the menu bar and shows what it's doing: red with sound waves while it listens, thinking while it transcribes, holding its pencil while it rewrites.
 
 ## Privacy
 

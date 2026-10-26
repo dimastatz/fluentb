@@ -67,7 +67,7 @@ Decisions made while building M4:
 
 - **Crates:** `tray-icon` 0.26 (with its `muda` menus) on the existing `tao` event loop. Both are by the Tauri team and cover macOS, Windows and Linux, which answers the open question for M9/M10.
 - **Pure models:** `tray::menu::menu_model(&Config, TrayStatus, Os)` builds the menu, and `tray::icon::icon(TrayStatus)` draws the icons. The menu takes the `TrayStatus` the core already sends through `set_tray_status`, not the `State`, so the facade needs no new method. Hotkeys are shown the way each OS writes them (`⇧⌘D` in Apple's modifier order on macOS, `Ctrl+Shift+D` elsewhere).
-- **Icons drawn in code:** the icons are anti-aliased shapes (signed distance functions) rendered at 44 px, so no image files ship. Idle is an outlined microphone, Recording a red filled one, Busy three dots, and Error a struck-through microphone. All but Recording are template images, so macOS tints them for light and dark menu bars.
+- **Icons drawn in code:** the icons are anti-aliased shapes (signed distance functions) rendered at 44 px, so no image files ship. Every state shows the fluentb bird from the logo: on its own when idle, red with sound waves while recording, with thought dots while transcribing, with its pencil while rewriting, and struck through on error. (Until issue #20 the icons were a microphone, three dots and a struck-through microphone, which looked like every other dictation app and like macOS's own microphone indicator.) All but Recording are template images, so macOS tints them for light and dark menu bars.
 - **Event bridge:** the hotkey and menu handlers run on the main thread and only forward raw `Signal`s into one channel. `platform::bridge::route` maps each signal to an `InputEvent` for the core, or to `OpenConfig`, which the adapter handles itself with `open -t`. The core is unchanged.
 - **Status updates:** `set_tray_status` posts `MainRequest::SetStatus` to the event loop, which updates the icon, the tooltip and the status line. It never waits, so the worker is never blocked by the UI and the other way round.
 - **Single instance:** `platform::instance` takes an OS file lock (`File::try_lock`) on `fluentb.lock` next to the config file. The OS releases it when the process exits, even after a crash, so a stale lock can't block the next launch. A second launch shows "fluentb is already running." and exits with code 1.
@@ -77,7 +77,7 @@ Decisions made while building M4:
 
 ## Manual checklist
 
-- [ ] The icon is an outline when idle, red while recording, and three dots while transcribing.
+- [ ] The icon is the bird when idle, a red bird with sound waves while recording, the bird with dots while transcribing, and the bird with a pencil while rewriting.
 - [ ] The icon reads well in both light and dark menu bars.
 - [ ] The menu shows the status line and the configured hotkeys.
 - [ ] "Open config…" opens `config.toml` in a text editor.
