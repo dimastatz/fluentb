@@ -35,7 +35,7 @@ It is built in Rust, lives in your system tray, and stays out of your way: no ma
 - **Dictate:** speak and have the transcription typed straight into the focused text field.
 - **Rewrite:** select text you've written and replace it with a clean, fluent version in the style you choose (neutral, casual, formal, concise).
 - **Works everywhere:** any app with a text field. No plugins or integrations needed.
-- **Small by default:** fluentb targets English and downloads about 475 MB of models on first run. Larger, more accurate models (including multilingual ones) are one menu click away.
+- **Small by default:** fluentb targets English and downloads about 1.2 GB of models on first run. Larger, more accurate models (including multilingual ones) are one menu click away.
 - **System tray app:** shows its state (idle, recording, busy) and offers a small menu.
 
 ## Privacy
@@ -83,7 +83,7 @@ cargo build --release
 2. On first run, fluentb:
    - shows a welcome notification;
    - asks for **Microphone** and **Accessibility** access (allow both for your terminal app; Accessibility is needed to read and type text in other apps);
-   - downloads its [models](#models) in the background, about 475 MB in all: the speech model (78 MB) first, then the rewrite model (397 MB).
+   - downloads its [models](#models) in the background, about 1.2 GB in all: the speech model (78 MB) first, then the rewrite model (1.1 GB).
 
    The menu shows the progress, and a notification says when each hotkey is ready.
 3. **Dictate:** click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
@@ -149,8 +149,8 @@ sounds = true         # a short sound when recording starts and stops
 max_recording_seconds = 120
 
 [rewrite]
-style = "neutral"     # neutral, casual, formal, or concise
-model = "auto"        # qwen3-0.6b; or qwen3-1.7b, qwen3-4b, gemma3-4b
+style = "neutral"     # neutral (clear, concise, warm), casual, formal, or concise
+model = "auto"        # qwen3-1.7b; or qwen3-0.6b, qwen3-4b, gemma3-4b
 unload_after_minutes = 10  # free the model's memory when idle
 keep_loaded = false
 max_characters = 4000
@@ -160,18 +160,18 @@ Any missing or invalid setting falls back to its default, and fluentb shows one 
 
 ## Models
 
-fluentb targets **English** and, to keep the download small, uses the smallest models by default:
+fluentb targets **English** and keeps the download small by default:
 
 | | Default | Size | Source (Hugging Face) | Licence |
 | --- | --- | --- | --- | --- |
 | Speech | `tiny.en` (Whisper, English only) | 78 MB | `ggerganov/whisper.cpp` | MIT |
-| Rewrite | `qwen3-0.6b` (Qwen3 0.6B, Q4_K_M) | 397 MB | `unsloth/Qwen3-0.6B-GGUF` | Apache 2.0 |
+| Rewrite | `qwen3-1.7b` (Qwen3 1.7B, Q4_K_M) | 1.1 GB | `unsloth/Qwen3-1.7B-GGUF` | Apache 2.0 |
 
-That's about **475 MB** on first run. The small models are fast (a rewrite takes well under a second on Apple Silicon), but they are less accurate. In particular, `qwen3-0.6b` sometimes drops part of a sentence when it rewrites; see [the evaluation](eval/rewrite/RESULTS.md). If that matters to you, switch to a larger model from the tray menu, or set `model` in `config.toml`:
+That's about **1.2 GB** on first run. A typical rewrite takes 1–2 s on Apple Silicon. The rewrite model is the smallest one that reliably turns broken sentences into correct ones; `qwen3-0.6b` (397 MB) is faster but often leaves bad grammar in place or drops words, so it isn't the default (see [the evaluation](eval/rewrite/RESULTS.md)). Switch models from the tray menu, or set `model` in `config.toml`:
 
 | Speech | Size | Rewrite | Size |
 | --- | --- | --- | --- |
-| `tiny` (multilingual) | 78 MB | `qwen3-1.7b` | 1.1 GB |
+| `tiny` (multilingual) | 78 MB | `qwen3-0.6b` (smallest) | 397 MB |
 | `base`, `base.en` | 148 MB | | |
 | `small`, `small.en` | 488 MB | `qwen3-4b` (best quality) | 2.5 GB |
 | `medium`, `medium.en` | 1.5 GB | `gemma3-4b` | 2.5 GB |

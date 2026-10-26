@@ -73,13 +73,13 @@ pub enum DictationMode {
 /// The local language model that rewrites text. All run on-device with llama.cpp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RewriteModel {
-    /// Qwen3 0.6B: the default, about 400 MB. Good enough for English. Apache 2.0.
+    /// Qwen3 0.6B: the smallest, about 400 MB, but unreliable at fixing grammar. Apache 2.0.
     Qwen3_0_6B,
     /// Qwen3 4B: the most capable. Apache 2.0.
     Qwen3_4B,
     /// Gemma 3 4B: strong multilingual rewriting. Gemma Terms of Use.
     Gemma3_4B,
-    /// Qwen3 1.7B: a middle ground. Apache 2.0.
+    /// Qwen3 1.7B: the default, about 1.1 GB. Apache 2.0.
     Qwen3_1_7B,
 }
 
