@@ -71,6 +71,33 @@ pub const EXAMPLES: [(&str, &str); 5] = [
     ),
 ];
 
+/// Extra examples for the technical style, which small models only follow when
+/// shown: run-on steps become a numbered list, terms are written the way engineers
+/// write them, and a question stays a question rather than being answered.
+pub const TECHNICAL_EXAMPLES: [(&str, &str); 2] = [
+    (
+        "to release we need to tag the commit then build the docker image and push it to the registry, after that update the k8s deployment",
+        "To release:\n1. Tag the commit.\n2. Build the Docker image and push it to the registry.\n3. Update the Kubernetes deployment.",
+    ),
+    (
+        "should we use postgres or mongo for the orders service, we need transactions across tables",
+        "Should we use PostgreSQL or MongoDB for the orders service? We need transactions across tables.",
+    ),
+];
+
+/// The worked examples shown before the user's text, for `style`.
+#[must_use]
+pub fn examples(style: Style) -> Vec<(&'static str, &'static str)> {
+    EXAMPLES
+        .into_iter()
+        .chain(
+            TECHNICAL_EXAMPLES
+                .into_iter()
+                .filter(|_| style == Style::Technical),
+        )
+        .collect()
+}
+
 /// What the model is told to do, for `style`.
 #[must_use]
 pub fn instructions(style: Style) -> String {
@@ -79,6 +106,11 @@ pub fn instructions(style: Style) -> String {
         Style::Casual => "Use a relaxed, friendly tone.",
         Style::Formal => "Use a polite, professional tone.",
         Style::Concise => "Make it as short as possible without losing meaning.",
+        Style::Technical => {
+            "Write for engineers and architects: short, precise sentences, with the right \
+             technical terms where they help. Turn three or more steps into a numbered list. \
+             Keep questions as questions and requests as requests."
+        }
     };
     [
         "You are an editor. Rewrite the text so it is grammatically correct, clear and concise.",
@@ -125,8 +157,8 @@ pub fn build_prompt(text: &str, style: Style, template: ChatTemplate) -> Prompt 
         ChatTemplate::ChatMl => user.to_owned(),
         ChatTemplate::Gemma => user.replacen("<text>", &format!("{rules}\n\n<text>"), 1),
     };
-    let examples: String = EXAMPLES
-        .iter()
+    let examples: String = examples(style)
+        .into_iter()
         .enumerate()
         .flat_map(|(index, (input, output))| {
             let turn = if index == 0 {
@@ -215,6 +247,7 @@ mod tests {
             (Style::Casual, "relaxed, friendly"),
             (Style::Formal, "polite, professional"),
             (Style::Concise, "as short as possible"),
+            (Style::Technical, "engineers and architects"),
         ];
 
         cases.iter().for_each(|(style, tone)| {
@@ -224,6 +257,27 @@ mod tests {
             assert!(rules.contains("complete and grammatical"));
             assert!(rules.contains("rewritten text only"));
         });
+    }
+
+    #[test]
+    fn only_the_technical_style_adds_its_examples() {
+        assert_eq!(examples(Style::Neutral), EXAMPLES);
+        assert_eq!(
+            examples(Style::Technical)[EXAMPLES.len()..],
+            TECHNICAL_EXAMPLES
+        );
+
+        let text = template_text(&build_prompt(
+            "draft",
+            Style::Technical,
+            ChatTemplate::ChatMl,
+        ));
+        let example = text.find(TECHNICAL_EXAMPLES[0].1).unwrap();
+        assert!(example < text.find("{TEXT}").unwrap());
+        assert!(
+            !template_text(&build_prompt("draft", Style::Casual, ChatTemplate::ChatMl))
+                .contains(TECHNICAL_EXAMPLES[0].1)
+        );
     }
 
     #[test]

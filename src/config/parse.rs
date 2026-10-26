@@ -425,7 +425,7 @@ mod tests {
                 ),
                 invalid(
                     "rewrite.style",
-                    "unknown style \"pirate\" (expected neutral, casual, formal, or concise)"
+                    "unknown style \"pirate\" (expected neutral, casual, formal, concise, or technical)"
                 ),
                 invalid(
                     "rewrite.model",

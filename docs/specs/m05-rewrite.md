@@ -52,7 +52,7 @@ Implement the Rewrite hotkey: read the selected text in the focused app, rewrite
 5. **Prompt** — built by a pure function `fn build_prompt(text, style) -> Prompt` using the model's chat template, with these rules:
    - Fix grammar, spelling, and punctuation; improve flow.
    - Keep meaning, facts, names, URLs, code spans, emoji, and the language.
-   - Apply the configured style (neutral, casual, formal, concise).
+   - Apply the configured style (neutral, casual, formal, concise, technical). `technical` was added later (issue #22): structured and precise for engineers and architects, with its own worked examples.
    - Return only the rewritten text, with no preamble.
 6. **Decoding** — low temperature (≈ 0.2) and a token limit derived from the input length (about 1.5× the input tokens plus a margin) so the output can't run away.
 7. **Post-processing** — a pure `fn clean_output(raw) -> String` strips quotes, preambles ("Here is…"), and trailing whitespace. If the result is empty, or much longer than the input (over 3×), it's treated as a failure and nothing is inserted.

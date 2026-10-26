@@ -225,7 +225,8 @@ mod tests {
     }
 
     /// Rewrites every sample in `eval/rewrite/samples.toml` with the model named by
-    /// `FLUENTB_EVAL_MODEL` (default `qwen3-1.7b`) and prints the results for review.
+    /// `FLUENTB_EVAL_MODEL` (default `qwen3-1.7b`) in `FLUENTB_EVAL_STYLE` (default
+    /// `neutral`), and prints the results for review.
     #[test]
     #[ignore = "manual model evaluation; needs the model downloaded"]
     fn rewrite_eval() {
@@ -239,12 +240,20 @@ mod tests {
         .unwrap()
         .parse::<toml::Table>()
         .unwrap();
-        let mut rewriter = rewriter(model);
+        let style = std::env::var("FLUENTB_EVAL_STYLE")
+            .map_or(Style::Neutral, |style| style.parse().unwrap());
+        let mut rewriter = Rewriter::new(
+            model,
+            &Rewrite {
+                style,
+                ..Config::defaults(Os::MacOs).rewrite
+            },
+        );
 
         let start = Instant::now();
         rewriter.load().unwrap();
         println!(
-            "# {model}: loaded in {:.1}s\n",
+            "# {model}, {style:?}: loaded in {:.1}s\n",
             start.elapsed().as_secs_f32()
         );
         samples["sample"]
