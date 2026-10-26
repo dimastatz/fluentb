@@ -26,8 +26,10 @@ pub struct Icon {
     pub template: bool,
 }
 
-/// The icon for `status`: a microphone when idle, a red filled microphone while
-/// recording, three dots while busy, and a struck-through microphone on error.
+/// The icon for `status`: the fluentb bird when idle, so it stands out among other
+/// menu bar apps; a red filled microphone while recording, the same signal macOS and
+/// other apps use for "listening now"; three dots while busy; and a struck-through
+/// bird on error.
 #[must_use]
 pub fn icon(status: TrayStatus) -> Icon {
     let template = status != TrayStatus::Recording;
@@ -65,22 +67,39 @@ type Point = (f32, f32);
 
 fn distance(status: TrayStatus, point: Point) -> f32 {
     match status {
-        TrayStatus::Idle => microphone(point, false),
-        TrayStatus::Recording => microphone(point, true),
+        TrayStatus::Idle => bird(point),
+        TrayStatus::Recording => microphone(point),
         TrayStatus::Transcribing | TrayStatus::Rewriting => [0.22, 0.5, 0.78]
             .into_iter()
             .map(|x| circle(point, (x, 0.5), 0.09))
             .fold(f32::INFINITY, f32::min),
         TrayStatus::Error => {
-            microphone(point, false).min(stroke(segment(point, (0.16, 0.16), (0.84, 0.84))))
+            // A clear gap around the slash keeps it visible across the solid bird.
+            let slash = segment(point, (0.14, 0.12), (0.80, 0.78));
+            bird(point).max(-(slash - 2.0 * STROKE)).min(slash - STROKE)
         }
     }
 }
 
-/// A capsule on a stand, outlined or filled.
-fn microphone(point: Point, filled: bool) -> f32 {
+/// The fluentb bird from the logo, as a silhouette: a round body with an eye cut
+/// out, two head tufts, a tail, a beak, and the perch line it sits on.
+fn bird(point: Point) -> f32 {
+    let body = circle(point, (0.52, 0.54), 0.27).max(-circle(point, (0.61, 0.46), 0.05));
+    [
+        body,
+        triangle(point, [(0.45, 0.32), (0.52, 0.29), (0.43, 0.10)]) - 0.015,
+        triangle(point, [(0.53, 0.29), (0.60, 0.32), (0.67, 0.13)]) - 0.015,
+        triangle(point, [(0.33, 0.38), (0.29, 0.58), (0.05, 0.28)]) - 0.015,
+        triangle(point, [(0.76, 0.45), (0.76, 0.57), (0.93, 0.51)]) - 0.01,
+        stroke(segment(point, (0.06, 0.90), (0.94, 0.90))),
+    ]
+    .into_iter()
+    .fold(f32::INFINITY, f32::min)
+}
+
+/// A filled capsule on a stand.
+fn microphone(point: Point) -> f32 {
     let capsule = segment(point, (0.5, 0.28), (0.5, 0.42)) - 0.14;
-    let capsule = if filled { capsule } else { stroke(capsule) };
     [
         capsule,
         stroke(cradle(point)),
@@ -99,6 +118,20 @@ fn cradle(point: Point) -> f32 {
     } else {
         length(sub(point, (center.0 - radius, center.1)))
             .min(length(sub(point, (center.0 + radius, center.1))))
+    }
+}
+
+/// Signed distance to the triangle with corners `[a, b, c]`: negative inside.
+fn triangle(point: Point, [a, b, c]: [Point; 3]) -> f32 {
+    let edge = segment(point, a, b)
+        .min(segment(point, b, c))
+        .min(segment(point, c, a));
+    let side = |from: Point, to: Point| cross(sub(to, from), sub(point, from)) >= 0.0;
+    let inside = side(a, b) == side(b, c) && side(b, c) == side(c, a);
+    if inside {
+        -edge
+    } else {
+        edge
     }
 }
 
@@ -123,6 +156,10 @@ fn sub(a: Point, b: Point) -> Point {
 
 fn dot(a: Point, b: Point) -> f32 {
     a.0 * b.0 + a.1 * b.1
+}
+
+fn cross(a: Point, b: Point) -> f32 {
+    a.0 * b.1 - a.1 * b.0
 }
 
 fn length(a: Point) -> f32 {
@@ -172,14 +209,34 @@ mod tests {
     }
 
     #[test]
-    fn idle_microphone_is_an_outline() {
+    fn idle_is_the_bird_on_its_perch() {
         let idle = icon(TrayStatus::Idle);
+        let shape = |at: Point| pixel(&idle, at)[3];
 
-        assert_eq!(pixel(&idle, (0.5, 0.35))[3], 0, "hollow inside");
-        assert_eq!(pixel(&idle, (0.36, 0.35))[3], 255, "capsule edge");
-        assert_eq!(pixel(&idle, (0.5, 0.70))[3], 255, "cradle");
-        assert_eq!(pixel(&idle, (0.26, 0.47))[3], 255, "cradle tip");
-        assert_eq!(pixel(&idle, (0.5, 0.86))[3], 255, "base");
+        assert_eq!(shape((0.5, 0.65)), 255, "body");
+        assert_eq!(shape((0.61, 0.46)), 0, "eye");
+        assert_eq!(shape((0.87, 0.51)), 255, "beak");
+        assert_eq!(shape((0.15, 0.36)), 255, "tail");
+        assert_eq!(shape((0.46, 0.18)), 255, "tuft");
+        assert_eq!(shape((0.5, 0.90)), 255, "perch");
+        assert_eq!(shape((0.5, 0.84)), 0, "gap above the perch");
+    }
+
+    #[test]
+    fn recording_is_a_filled_microphone() {
+        let recording = icon(TrayStatus::Recording);
+
+        [(0.5, 0.35), (0.5, 0.70), (0.26, 0.47), (0.5, 0.86)]
+            .iter()
+            .for_each(|at| assert_eq!(pixel(&recording, *at)[3], 255, "{at:?}"));
+    }
+
+    #[test]
+    fn triangles_are_negative_inside() {
+        let corners = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
+
+        assert!(triangle((0.2, 0.2), corners) < 0.0);
+        assert!((triangle((1.0, 1.0), corners) - 0.5_f32.sqrt()).abs() < 1e-6);
     }
 
     #[test]
@@ -194,10 +251,17 @@ mod tests {
     }
 
     #[test]
-    fn error_strikes_through_the_microphone() {
+    fn error_strikes_through_the_bird() {
         let error = icon(TrayStatus::Error);
 
         assert_eq!(pixel(&error, (0.2, 0.2))[3], 255);
+        assert_eq!(pixel(&error, (0.61, 0.46))[3], 0, "the bird's eye");
+        assert_eq!(
+            pixel(&error, (0.40, 0.46))[3],
+            0,
+            "the gap beside the slash"
+        );
+        assert_eq!(pixel(&icon(TrayStatus::Idle), (0.40, 0.46))[3], 255);
         assert_eq!(pixel(&icon(TrayStatus::Idle), (0.2, 0.2))[3], 0);
     }
 
