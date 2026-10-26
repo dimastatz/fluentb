@@ -57,7 +57,7 @@ Make fluentb work out of the box: on first run, download and verify the Whisper 
 9. **Default model choice**
    - Whisper: `base.en` if the system language is English, otherwise `base`.
    - Rewrite: the default model, or the light model on machines with under 16 GB of RAM.
-   - *Changed after M6:* fluentb now targets English, and `auto` picks the smallest models, `tiny.en` and `qwen3-0.6b` (about 475 MB together), on every machine. See `eval/rewrite/RESULTS.md`.
+   - *Changed after M6:* fluentb now targets English, and `auto` picks `tiny.en` and `qwen3-1.7b` (about 1.2 GB together) on every machine. `qwen3-0.6b` was the default briefly but left broken grammar in place (issue #18). See `eval/rewrite/RESULTS.md`.
 10. **Permission status** in the tray menu: "⚠ Accessibility not granted — Fix…" while missing.
 
 ### Non-functional

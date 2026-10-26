@@ -178,12 +178,13 @@ pub const fn choose_whisper(choice: Choice<WhisperModel>) -> WhisperModel {
     }
 }
 
-/// The rewrite model to use: `auto` is `qwen3-0.6b`, the smallest.
+/// The rewrite model to use: `auto` is `qwen3-1.7b`, the smallest one that
+/// reliably fixes broken grammar (`qwen3-0.6b` often doesn't; see issue #18).
 #[must_use]
 pub const fn choose_rewrite(choice: Choice<RewriteModel>) -> RewriteModel {
     match choice {
         Choice::Fixed(model) => model,
-        Choice::Auto => RewriteModel::Qwen3_0_6B,
+        Choice::Auto => RewriteModel::Qwen3_1_7B,
     }
 }
 
@@ -436,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_picks_the_smallest_models() {
+    fn auto_picks_small_models() {
         let tiny_en = WhisperModel {
             size: ModelSize::Tiny,
             english_only: true,
@@ -444,7 +445,7 @@ mod tests {
 
         assert_eq!(choose_whisper(Choice::Auto), tiny_en);
         assert_eq!(choose_whisper(Choice::Fixed(LARGE)), LARGE);
-        assert_eq!(choose_rewrite(Choice::Auto), RewriteModel::Qwen3_0_6B);
+        assert_eq!(choose_rewrite(Choice::Auto), RewriteModel::Qwen3_1_7B);
         assert_eq!(
             choose_rewrite(Choice::Fixed(RewriteModel::Gemma3_4B)),
             RewriteModel::Gemma3_4B

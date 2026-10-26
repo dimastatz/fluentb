@@ -31,10 +31,10 @@ sounds = true
 max_recording_seconds = 120
 
 [rewrite]
-# neutral, casual, formal, or concise.
+# neutral (clear, concise and warm), casual, formal, or concise (as short as possible).
 style = "neutral"
-# The local model that rewrites text: auto (qwen3-0.6b, the smallest), qwen3-0.6b,
-# qwen3-1.7b, qwen3-4b, or gemma3-4b. Larger models rewrite better.
+# The local model that rewrites text: auto (qwen3-1.7b), qwen3-0.6b (smallest,
+# least accurate), qwen3-1.7b, qwen3-4b, or gemma3-4b. Larger models rewrite better.
 model = "auto"
 # The model is unloaded after this many idle minutes, to free memory.
 unload_after_minutes = 10

@@ -1,5 +1,5 @@
 # Inputs for comparing rewrite models (docs/specs/m05-rewrite.md, "Model evaluation").
-# Run: FLUENTB_EVAL_MODEL=qwen3-0.6b cargo test --release --lib rewrite_eval -- --ignored --nocapture
+# Run: FLUENTB_EVAL_MODEL=qwen3-1.7b cargo test --release --lib rewrite_eval -- --ignored --nocapture
 
 [[sample]]
 language = "en"
@@ -88,3 +88,33 @@ text = "great job on the launch everyone 🎉 the numbers looks amazing, lets ke
 language = "en"
 kind = "short"
 text = "ok sounds good"
+
+[[sample]]
+language = "en"
+kind = "broken grammar (issue #18)"
+text = "push i want and make plan for tomorrow"
+
+[[sample]]
+language = "en"
+kind = "broken grammar"
+text = "me and him goes to office tomorrow, we will discuss about roadmap and decide what feature we doing first"
+
+[[sample]]
+language = "en"
+kind = "broken grammar"
+text = "can you to send me the report before we meeting, i need check numbers"
+
+[[sample]]
+language = "en"
+kind = "dictated run-on"
+text = "so basically what i was thinking is that we should maybe try to move the release to next week because the testing is not done yet and also the docs are not ready so yeah let me know what you think"
+
+[[sample]]
+language = "en"
+kind = "word order"
+text = "coffee i want and then go to the meeting"
+
+[[sample]]
+language = "en"
+kind = "word order"
+text = "the tests you run please and send me result"
