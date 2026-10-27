@@ -151,7 +151,7 @@ max_recording_seconds = 120
 [rewrite]
 style = "neutral"     # neutral (clear, concise, warm), casual, formal, concise, or technical
 model = "auto"        # qwen3-1.7b; or qwen3-0.6b, qwen3-4b, gemma3-4b
-unload_after_minutes = 10  # free the model's memory when idle
+unload_after_minutes = 1   # free the model's memory when idle
 keep_loaded = false
 max_characters = 4000
 ```

@@ -62,7 +62,7 @@ pub struct Rewrite {
 }
 
 impl Rewrite {
-    pub const DEFAULT_UNLOAD_AFTER_MINUTES: u32 = 10;
+    pub const DEFAULT_UNLOAD_AFTER_MINUTES: u32 = 1;
     pub const DEFAULT_MAX_CHARACTERS: usize = 4_000;
 }
 
