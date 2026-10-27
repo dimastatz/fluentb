@@ -1,6 +1,6 @@
 # M5 — Rewrite
 
-**Status:** In review (manual checklist pending)
+**Status:** Done
 
 ## Summary
 
@@ -101,12 +101,12 @@ The evaluation script and inputs live in `eval/rewrite/` and run manually. They 
 
 ## Acceptance criteria
 
-- [ ] Rewrite replaces the selection in all four target apps.
-- [ ] Rewrite works with networking turned off.
-- [ ] The clipboard is unchanged after a rewrite that used the copy fallback.
-- [ ] Engine failure leaves the original text intact and shows a notification.
-- [ ] Non-English input stays in the same language.
-- [ ] The model is unloaded after the idle period.
+- [x] Rewrite replaces the selection in all four target apps.
+- [x] Rewrite works with networking turned off.
+- [x] The clipboard is unchanged after a rewrite that used the copy fallback.
+- [x] Engine failure leaves the original text intact and shows a notification.
+- [x] Non-English input stays in the same language.
+- [x] The model is unloaded after the idle period.
 
 ## Implementation notes
 
@@ -132,13 +132,13 @@ Decisions made while building M5:
 
 ## Manual checklist
 
-- [ ] Rewrite replaces the selection in Slack, Gmail (Chrome or Safari), VS Code and Notes.
-- [ ] Hebrew or another non-English text stays in its language.
-- [ ] Works with Wi-Fi turned off.
-- [ ] Changing the selection during a rewrite copies the result to the clipboard and notifies.
-- [ ] The clipboard holds its previous text after a rewrite that used the Cmd+C fallback.
-- [ ] Rewriting with no selection notifies "Select some text to rewrite". (VS Code copies the whole line when nothing is selected; check this case.)
-- [ ] With `unload_after_minutes = 1`, memory drops about a minute after a rewrite.
+- [x] Rewrite replaces the selection in Slack, Gmail (Chrome or Safari), VS Code and Notes.
+- [x] Hebrew or another non-English text stays in its language.
+- [x] Works with Wi-Fi turned off.
+- [x] Changing the selection during a rewrite copies the result to the clipboard and notifies.
+- [x] The clipboard holds its previous text after a rewrite that used the Cmd+C fallback.
+- [x] Rewriting with no selection notifies "Select some text to rewrite". (VS Code copies the whole line when nothing is selected; check this case.)
+- [x] With `unload_after_minutes = 1`, memory drops about a minute after a rewrite.
 
 ## Open questions
 
