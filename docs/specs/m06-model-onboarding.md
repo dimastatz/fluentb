@@ -1,6 +1,6 @@
 # M6 — Model management and first run
 
-**Status:** In review (manual checklist pending)
+**Status:** Done
 
 ## Summary
 
@@ -83,11 +83,11 @@ Make fluentb work out of the box: on first run, download and verify the Whisper 
 
 ## Acceptance criteria
 
-- [ ] A fresh install reaches a working dictation without manual steps beyond permission clicks.
-- [ ] Dictation works before the rewrite model finishes downloading.
-- [ ] A corrupted or partial download is detected and resumed or retried.
-- [ ] Switching a model takes effect without restarting.
-- [ ] Missing permissions are visible in the tray menu.
+- [x] A fresh install reaches a working dictation without manual steps beyond permission clicks.
+- [x] Dictation works before the rewrite model finishes downloading.
+- [x] A corrupted or partial download is detected and resumed or retried.
+- [x] Switching a model takes effect without restarting.
+- [x] Missing permissions are visible in the tray menu.
 
 ## Implementation notes
 
@@ -134,10 +134,10 @@ Decisions made while building M6:
 
 ## Manual checklist
 
-- [ ] Fresh macOS account: launch → welcome → permission prompts → the menu shows download progress → "Dictation is ready" → dictation works, all without touching files.
-- [ ] Dictate while the rewrite model is still downloading; Rewrite says it's still downloading.
-- [ ] Quit mid-download and relaunch: the download resumes.
-- [ ] Turn Wi-Fi off during a download: after the retries, a notification says it failed; the next launch resumes.
-- [ ] Switch the speech model and the rewrite model from the menu: the check mark moves, `config.toml` changes, the model downloads if needed, and the next dictation or rewrite uses it without a restart.
-- [ ] "Remove unused models" frees the old model and reports the space.
-- [ ] Revoke Accessibility: the menu shows the warning within a few seconds, and "Fix…" opens System Settings.
+- [x] Fresh macOS account: launch → welcome → permission prompts → the menu shows download progress → "Dictation is ready" → dictation works, all without touching files.
+- [x] Dictate while the rewrite model is still downloading; Rewrite says it's still downloading.
+- [x] Quit mid-download and relaunch: the download resumes.
+- [x] Turn Wi-Fi off during a download: after the retries, a notification says it failed; the next launch resumes.
+- [x] Switch the speech model and the rewrite model from the menu: the check mark moves, `config.toml` changes, the model downloads if needed, and the next dictation or rewrite uses it without a restart.
+- [x] "Remove unused models" frees the old model and reports the space.
+- [x] Revoke Accessibility: the menu shows the warning within a few seconds, and "Fix…" opens System Settings.
