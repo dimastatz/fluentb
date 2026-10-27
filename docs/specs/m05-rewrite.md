@@ -48,7 +48,7 @@ Implement the Rewrite hotkey: read the selected text in the focused app, rewrite
    - Models under ~1.5B parameters are out: they drift from the original meaning, especially in non-English text.
    - Every registry model needs a licence that allows fluentb to download and run it for any user, including commercial use. Non-commercial licences, such as Qwen2.5-3B's Qwen Research licence, are excluded. Licences are listed below.
    - Config: `[rewrite] model = "qwen3-4b"`, chosen from the M6 model registry.
-4. **Memory policy** — load the model on the first rewrite, keep it warm, and unload it after a configurable idle period (default 10 minutes) so idle RAM stays low. `rewrite.keep_loaded = true` disables unloading.
+4. **Memory policy** — load the model on the first rewrite, keep it warm, and unload it after a configurable idle period (default 1 minute) so idle RAM stays low. `rewrite.keep_loaded = true` disables unloading.
 5. **Prompt** — built by a pure function `fn build_prompt(text, style) -> Prompt` using the model's chat template, with these rules:
    - Fix grammar, spelling, and punctuation; improve flow.
    - Keep meaning, facts, names, URLs, code spans, emoji, and the language.

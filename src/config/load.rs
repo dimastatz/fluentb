@@ -38,7 +38,7 @@ style = "neutral"
 # least accurate), qwen3-1.7b, qwen3-4b, or gemma3-4b. Larger models rewrite better.
 model = "auto"
 # The model is unloaded after this many idle minutes, to free memory.
-unload_after_minutes = 10
+unload_after_minutes = 1
 # Set to true to keep the model in memory for instant rewrites.
 keep_loaded = false
 # Longer selections are not rewritten.
