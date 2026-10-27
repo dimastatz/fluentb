@@ -1,6 +1,6 @@
 # M3 — macOS dictation end to end
 
-**Status:** In review (manual checklist pending)
+**Status:** Done
 
 ## Summary
 
@@ -61,11 +61,11 @@ Implement the macOS `Facade` for the dictation path: global hotkeys, microphone 
 
 ## Acceptance criteria
 
-- [ ] Dictation works in all four target apps.
-- [ ] The user's clipboard is unchanged after insertion.
-- [ ] The microphone indicator turns off when recording stops.
-- [ ] Denied permissions produce the correct notification.
-- [ ] CI stays green on `macos-latest`.
+- [x] Dictation works in all four target apps.
+- [x] The user's clipboard is unchanged after insertion.
+- [x] The microphone indicator turns off when recording stops.
+- [x] Denied permissions produce the correct notification.
+- [x] CI stays green on `macos-latest`.
 
 ## Implementation notes
 

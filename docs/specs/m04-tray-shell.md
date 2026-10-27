@@ -1,6 +1,6 @@
 # M4 — Tray app shell
 
-**Status:** In review (manual checklist pending)
+**Status:** Done
 
 ## Summary
 
@@ -56,9 +56,9 @@ Turn the M3 background binary into a proper menu-bar app: a tray icon that refle
 
 ## Acceptance criteria
 
-- [ ] The icon changes within 100 ms of each state change.
-- [ ] Quit stops recording and exits cleanly.
-- [ ] There is no Dock icon or window.
+- [x] The icon changes within 100 ms of each state change.
+- [x] Quit stops recording and exits cleanly.
+- [x] There is no Dock icon or window.
 - [x] A second instance is refused.
 
 ## Implementation notes
@@ -77,12 +77,12 @@ Decisions made while building M4:
 
 ## Manual checklist
 
-- [ ] The icon is the bird when idle, a red bird with sound waves while recording, the bird with dots while transcribing, and the bird with a pencil while rewriting.
-- [ ] The icon reads well in both light and dark menu bars.
-- [ ] The menu shows the status line and the configured hotkeys.
-- [ ] "Open config…" opens `config.toml` in a text editor.
-- [ ] "Quit fluentb" exits, including while recording (the microphone indicator turns off).
-- [ ] There is no Dock icon and no window.
+- [x] The icon is the bird when idle, a red bird with sound waves while recording, the bird with dots while transcribing, and the bird with a pencil while rewriting.
+- [x] The icon reads well in both light and dark menu bars.
+- [x] The menu shows the status line and the configured hotkeys.
+- [x] "Open config…" opens `config.toml` in a text editor.
+- [x] "Quit fluentb" exits, including while recording (the microphone indicator turns off).
+- [x] There is no Dock icon and no window.
 
 ## Open questions
 

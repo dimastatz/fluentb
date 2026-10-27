@@ -263,8 +263,8 @@ Each milestone has a PRD in [`docs/specs/`](docs/specs/README.md).
 - [x] M0: Foundation (`Facade` trait, CI with coverage gate)
 - [x] M1: Pure state manager
 - [x] M2: Configuration
-- [ ] M3: macOS dictation end to end
-- [ ] M4: Tray app shell
+- [x] M3: macOS dictation end to end
+- [x] M4: Tray app shell
 - [ ] M5: Local rewrite
 - [ ] M6: Model download and first-run onboarding
 - [ ] M7: Polish and robustness
