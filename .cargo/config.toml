@@ -1,0 +1,8 @@
+[env]
+# Build llama.cpp without OpenSSL. fluentb never uses llama.cpp's network code
+# (its model downloader in `common`), and rewrite must stay offline anyway.
+# Without this, CMake's FindOpenSSL picks up Homebrew's openssl@4 on newer
+# macOS runners but can't read its version, so the `OpenSSL::SSL` target that
+# llama.cpp's vendored cpp-httplib links to is missing and the build fails.
+# llama-cpp-sys-2 forwards every `CMAKE_*` variable to CMake.
+CMAKE_DISABLE_FIND_PACKAGE_OpenSSL = "ON"
