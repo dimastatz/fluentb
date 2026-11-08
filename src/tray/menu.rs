@@ -1,6 +1,6 @@
 //! The tray menu, built from the config and what the app is doing.
 
-use crate::config::Config;
+use crate::config::{Config, Style};
 use crate::download::format_size;
 use crate::facade::{Hotkey, Permission, TrayStatus};
 use crate::models::{self, Kind, Model};
@@ -13,6 +13,8 @@ pub enum MenuAction {
     Quit,
     /// Switch to this model, downloading it if needed.
     SelectModel(Model),
+    /// Rewrite in this style from now on.
+    SelectStyle(Style),
     RemoveUnusedModels,
     /// Open System Settings where this permission is granted.
     FixPermission(Permission),
@@ -30,6 +32,7 @@ impl MenuAction {
             Self::OpenConfig => "open-config".into(),
             Self::Quit => "quit".into(),
             Self::SelectModel(model) => format!("model:{}", model.id()),
+            Self::SelectStyle(style) => format!("style:{}", style.id()),
             Self::RemoveUnusedModels => "remove-unused-models".into(),
             Self::FixPermission(Permission::Microphone) => "fix:microphone".into(),
             Self::FixPermission(Permission::Accessibility) => "fix:accessibility".into(),
@@ -58,7 +61,13 @@ impl MenuAction {
             other => other
                 .strip_prefix("model:")
                 .and_then(model)
-                .map(Self::SelectModel),
+                .map(Self::SelectModel)
+                .or_else(|| {
+                    other
+                        .strip_prefix("style:")
+                        .and_then(|name| name.parse().ok())
+                        .map(Self::SelectStyle)
+                }),
         }
     }
 }
@@ -100,6 +109,7 @@ pub struct MenuState {
     pub download: Option<(Kind, u8)>,
     pub speech: Model,
     pub rewrite: Model,
+    pub style: Style,
     /// Permissions the user hasn't granted.
     pub missing: Vec<Permission>,
     pub launch_at_login: bool,
@@ -135,6 +145,17 @@ pub fn menu_model(config: &Config, state: &MenuState, os: Os) -> MenuModel {
             })
             .collect(),
     });
+    let style_menu = MenuEntry::Submenu {
+        title: "Rewrite style".into(),
+        entries: Style::ALL
+            .into_iter()
+            .map(|style| MenuEntry::Choice {
+                action: MenuAction::SelectStyle(style),
+                title: style_title(style).into(),
+                checked: style == state.style,
+            })
+            .collect(),
+    };
     let launch_at_login = MenuEntry::Choice {
         action: MenuAction::ToggleLaunchAtLogin,
         title: "Launch at login".into(),
@@ -158,6 +179,7 @@ pub fn menu_model(config: &Config, state: &MenuState, os: Os) -> MenuModel {
             .chain([MenuEntry::Separator])
             .chain(model_menus)
             .chain([
+                style_menu,
                 MenuEntry::Action {
                     action: MenuAction::RemoveUnusedModels,
                     title: "Remove unused models".into(),
@@ -209,6 +231,17 @@ fn model_title(model: Model) -> String {
     format!("{}{size}", model.id())
 }
 
+/// The style's menu entry: its name and what it sounds like.
+const fn style_title(style: Style) -> &'static str {
+    match style {
+        Style::Neutral => "Neutral — clear, warm",
+        Style::Casual => "Casual — relaxed, friendly",
+        Style::Formal => "Formal — polite, professional",
+        Style::Concise => "Concise — as short as possible",
+        Style::Technical => "Technical — structured, for engineers",
+    }
+}
+
 const fn permission_name(permission: Permission) -> &'static str {
     match permission {
         Permission::Microphone => "Microphone access",
@@ -241,6 +274,7 @@ mod tests {
             download: None,
             speech: BASE_EN,
             rewrite: QWEN,
+            style: Style::Neutral,
             missing: Vec::new(),
             launch_at_login: false,
         }
@@ -354,6 +388,41 @@ mod tests {
     }
 
     #[test]
+    fn style_submenu_follows_the_model_submenus_and_checks_the_current_style() {
+        let state = MenuState {
+            style: Style::Technical,
+            ..state()
+        };
+
+        let menu = menu_model(&Config::defaults(Os::MacOs), &state, Os::MacOs);
+
+        let titles: Vec<&str> = menu
+            .entries
+            .iter()
+            .filter_map(|entry| match entry {
+                MenuEntry::Submenu { title, .. } => Some(title.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(titles, ["Speech model", "Rewrite model", "Rewrite style"]);
+        let choice = |style, title: &str| MenuEntry::Choice {
+            action: MenuAction::SelectStyle(style),
+            title: title.into(),
+            checked: style == Style::Technical,
+        };
+        assert_eq!(
+            submenu(&menu, "Rewrite style"),
+            [
+                choice(Style::Neutral, "Neutral — clear, warm"),
+                choice(Style::Casual, "Casual — relaxed, friendly"),
+                choice(Style::Formal, "Formal — polite, professional"),
+                choice(Style::Concise, "Concise — as short as possible"),
+                choice(Style::Technical, "Technical — structured, for engineers"),
+            ]
+        );
+    }
+
+    #[test]
     fn missing_permissions_come_first() {
         let state = MenuState {
             missing: vec![Permission::Accessibility, Permission::Microphone],
@@ -434,12 +503,24 @@ mod tests {
             models::REGISTRY
                 .iter()
                 .map(|entry| MenuAction::SelectModel(entry.model)),
-        );
+        )
+        .chain(Style::ALL.map(MenuAction::SelectStyle));
 
         actions.for_each(|action| assert_eq!(MenuAction::from_id(&action.id()), Some(action)));
         assert_eq!(MenuAction::SelectModel(BASE_EN).id(), "model:base.en");
-        ["about", "model:huge", "model:", "fix:camera"]
-            .iter()
-            .for_each(|id| assert_eq!(MenuAction::from_id(id), None, "{id}"));
+        assert_eq!(
+            MenuAction::SelectStyle(Style::Technical).id(),
+            "style:technical"
+        );
+        [
+            "about",
+            "model:huge",
+            "model:",
+            "fix:camera",
+            "style:",
+            "style:pirate",
+        ]
+        .iter()
+        .for_each(|id| assert_eq!(MenuAction::from_id(id), None, "{id}"));
     }
 }

@@ -215,20 +215,48 @@ impl FromStr for DictationMode {
     }
 }
 
+impl Style {
+    /// Every style, in the order the menu lists them.
+    pub const ALL: [Self; 5] = [
+        Self::Neutral,
+        Self::Casual,
+        Self::Formal,
+        Self::Concise,
+        Self::Technical,
+    ];
+
+    /// The name used in the config file.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Neutral => "neutral",
+            Self::Casual => "casual",
+            Self::Formal => "formal",
+            Self::Concise => "concise",
+            Self::Technical => "technical",
+        }
+    }
+}
+
+impl fmt::Display for Style {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.id())
+    }
+}
+
 impl FromStr for Style {
     type Err = String;
 
     fn from_str(text: &str) -> Result<Self, String> {
-        match text {
-            "neutral" => Ok(Self::Neutral),
-            "casual" => Ok(Self::Casual),
-            "formal" => Ok(Self::Formal),
-            "concise" => Ok(Self::Concise),
-            "technical" => Ok(Self::Technical),
-            _ => Err(format!(
-                "unknown style \"{text}\" (expected neutral, casual, formal, concise, or technical)"
-            )),
-        }
+        Self::ALL
+            .into_iter()
+            .find(|style| style.id() == text)
+            .ok_or_else(|| {
+                format!(
+                    "unknown style \"{text}\" \
+                     (expected neutral, casual, formal, concise, or technical)"
+                )
+            })
     }
 }
 
@@ -323,6 +351,16 @@ mod tests {
         styles
             .into_iter()
             .for_each(|(text, style)| assert_eq!(text.parse(), Ok(style)));
-        assert!("pirate".parse::<Style>().is_err());
+        assert_eq!(
+            "pirate".parse::<Style>().unwrap_err(),
+            "unknown style \"pirate\" (expected neutral, casual, formal, concise, or technical)"
+        );
+    }
+
+    #[test]
+    fn styles_round_trip() {
+        Style::ALL.into_iter().for_each(|style| {
+            assert_eq!(style.to_string().parse(), Ok(style));
+        });
     }
 }

@@ -103,6 +103,7 @@ pub fn next_route_within(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Style;
     use std::sync::mpsc;
 
     const HOTKEYS: [(u32, Hotkey); 2] = [(7, Hotkey::Dictate), (9, Hotkey::Rewrite)];
@@ -154,6 +155,10 @@ mod tests {
             (
                 Signal::Menu("remove-unused-models".into()),
                 Some(Route::Action(MenuAction::RemoveUnusedModels)),
+            ),
+            (
+                Signal::Menu("style:technical".into()),
+                Some(Route::Action(MenuAction::SelectStyle(Style::Technical))),
             ),
             (
                 Signal::Model(QWEN, ModelStatus::Downloading { percent: 3 }),

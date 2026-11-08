@@ -33,6 +33,7 @@ max_recording_seconds = 120
 [rewrite]
 # neutral (clear, concise and warm), casual, formal, concise (as short as possible), or
 # technical (structured and precise, with technical terms, for engineers and architects).
+# You can also pick it from the menu bar icon's "Rewrite style" menu.
 style = "neutral"
 # The local model that rewrites text: auto (qwen3-1.7b), qwen3-0.6b (smallest,
 # least accurate), qwen3-1.7b, qwen3-4b, or gemma3-4b. Larger models rewrite better.
