@@ -4,7 +4,7 @@ use super::recorder::Recording;
 use super::rewriter::Rewriter;
 use super::transcriber::Transcriber;
 use super::{insert, launch_agent_path, notify, permissions, selection, MainRequest};
-use crate::config::{self, Config, Language, Rewrite, RewriteModel, WhisperModel};
+use crate::config::{self, Config, Language, Rewrite, RewriteModel, Style, WhisperModel};
 use crate::download::format_size;
 use crate::facade::{
     Audio, Cue, Facade, FacadeError, Hotkey, HotkeyBinding, InputEvent, ModelStatus, Replacement,
@@ -82,6 +82,7 @@ impl MacFacade {
             MenuAction::FixPermission(permission) => permissions::open_settings(permission),
             MenuAction::RemoveUnusedModels => self.remove_unused_models(),
             MenuAction::SelectModel(model) => return Some(self.select(model)),
+            MenuAction::SelectStyle(style) => self.select_style(style),
             MenuAction::ToggleLaunchAtLogin => self.toggle_launch_at_login(),
             MenuAction::RevealLogs => reveal_logs(),
             MenuAction::Quit => {}
@@ -104,7 +105,12 @@ impl MacFacade {
                 ("rewrite", Kind::Rewrite)
             }
         };
-        if let Err(reason) = save_choice(self.setup.config_path.as_deref(), section, model) {
+        if let Err(reason) = save_setting(
+            self.setup.config_path.as_deref(),
+            section,
+            "model",
+            &model.id(),
+        ) {
             notify::show(&format!("Couldn't save the model choice: {reason}"));
         }
         let _ = self.setup.proxy.send_event(MainRequest::Models {
@@ -119,6 +125,23 @@ impl MacFacade {
             ModelStatus::Downloading { percent: 0 }
         };
         InputEvent::ModelChanged(kind, status)
+    }
+
+    /// Switches the rewrite style: saves it in the config and applies it from the next
+    /// rewrite on. Unlike a model switch, a loaded model stays warm.
+    fn select_style(&mut self, style: Style) {
+        self.rewrite_config.style = style;
+        self.rewriter.set_style(style);
+        tracing::info!(style = style.id(), "rewrite style");
+        if let Err(reason) = save_setting(
+            self.setup.config_path.as_deref(),
+            "rewrite",
+            "style",
+            style.id(),
+        ) {
+            notify::show(&format!("Couldn't save the rewrite style: {reason}"));
+        }
+        let _ = self.setup.proxy.send_event(MainRequest::Style(style));
     }
 
     /// Passes a download update to the core if `model` is still the one in use.
@@ -394,19 +417,18 @@ fn reveal_logs() {
     }
 }
 
-/// Writes `model` into the config file's `[section]`, keeping the rest of the file.
-fn save_choice(
+/// Writes `key = value` into the config file's `[section]`, keeping the rest of the
+/// file.
+fn save_setting(
     path: Option<&Path>,
     section: &str,
-    model: Model,
+    key: &str,
+    value: &str,
 ) -> std::result::Result<(), String> {
     let path = path.ok_or("couldn't find the config file (is HOME set?)")?;
     let text = fs::read_to_string(path).unwrap_or_default();
-    fs::write(
-        path,
-        config::set_string(&text, section, "model", &model.id()),
-    )
-    .map_err(|error| error.to_string())
+    fs::write(path, config::set_string(&text, section, key, value))
+        .map_err(|error| error.to_string())
 }
 
 /// Opens the config file in the default text editor, reporting failures.

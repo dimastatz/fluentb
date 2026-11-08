@@ -60,6 +60,11 @@ impl Rewriter {
         }
     }
 
+    /// Rewrites in `style` from the next rewrite on, keeping a loaded model warm.
+    pub fn set_style(&mut self, style: Style) {
+        self.style = style;
+    }
+
     /// Rewrites `text`, stopping early with [`FacadeError::Cancelled`] once `cancel`
     /// is set.
     pub fn rewrite(&mut self, text: &str, cancel: &AtomicBool) -> Result<String> {

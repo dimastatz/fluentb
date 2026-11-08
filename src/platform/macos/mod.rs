@@ -23,7 +23,7 @@ mod tray;
 
 use crate::accelerator::Accelerator;
 use crate::app::{self, HotkeyLabels, Models};
-use crate::config::{self, Config, ConfigWarning};
+use crate::config::{self, Config, ConfigWarning, Style};
 use crate::facade::{ModelStatus, TrayStatus};
 use crate::logging;
 use crate::models::{self, Kind, Model};
@@ -68,6 +68,8 @@ pub(crate) enum MainRequest {
         speech: Model,
         rewrite: Model,
     },
+    /// The rewrite style changed, so the menu's check mark must too.
+    Style(Style),
     /// Launch at login was turned on or off.
     LaunchAtLogin(bool),
     Exit(i32),
@@ -109,6 +111,7 @@ pub fn run() -> ! {
     onboard(&config, config_path.as_deref(), &pending);
 
     let menu_config = config.clone();
+    let style = config.rewrite.style;
     let setup = Setup {
         config_path,
         signals,
@@ -135,6 +138,7 @@ pub fn run() -> ! {
             download: None,
             speech: Model::Whisper(speech),
             rewrite: Model::Rewrite(rewrite),
+            style,
             missing: permissions::missing(),
             launch_at_login: launch_agent_path().is_some_and(|path| path.exists()),
         },
@@ -238,6 +242,10 @@ impl MainLoop {
             MainRequest::Models { speech, rewrite } => {
                 self.state.speech = speech;
                 self.state.rewrite = rewrite;
+                true
+            }
+            MainRequest::Style(style) => {
+                self.state.style = style;
                 true
             }
             MainRequest::LaunchAtLogin(enabled) => {

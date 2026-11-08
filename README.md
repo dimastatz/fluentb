@@ -33,7 +33,7 @@ It is built in Rust, lives in your system tray, and stays out of your way: no ma
 ## Features
 
 - **Dictate:** speak and have the transcription typed straight into the focused text field.
-- **Rewrite:** select text you've written and replace it with a clean, fluent version in the style you choose (neutral, casual, formal, concise, or technical for engineers and architects).
+- **Rewrite:** select text you've written and replace it with a clean, fluent version in the style you choose from the menu bar (neutral, casual, formal, concise, or technical for engineers and architects).
 - **Works everywhere:** any app with a text field. No plugins or integrations needed.
 - **Small by default:** fluentb targets English and downloads about 1.2 GB of models on first run. Larger, more accurate models (including multilingual ones) are one menu click away.
 - **System tray app:** the fluentb bird sits in the menu bar and shows what it's doing: red with sound waves while it listens, thinking while it transcribes, holding its pencil while it rewrites.
@@ -92,6 +92,7 @@ cargo build --release
 fluentb shows a microphone in the menu bar: an outline when idle, red while recording, and three dots while transcribing. Its menu:
 - lists your hotkeys;
 - switches the speech and rewrite models (downloading them if needed);
+- switches the rewrite style (neutral, casual, formal, concise, or technical), from the next rewrite on;
 - removes models you no longer use;
 - warns about missing permissions;
 - opens the config, and quits the app.
