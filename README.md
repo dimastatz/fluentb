@@ -89,7 +89,7 @@ cargo build --release
 3. **Dictate:** click into any text field, press `⌘⇧D`, speak, and press `⌘⇧D` again.
 4. **Rewrite:** select some text in any app and press `⌘⇧R`.
 
-fluentb shows a microphone in the menu bar: an outline when idle, red while recording, and three dots while transcribing. Its menu:
+fluentb shows the fluentb bird in the menu bar: on its own when idle, red with sound waves while recording, with thought dots while transcribing, with its pencil while rewriting, and struck through on error. Its menu:
 - lists your hotkeys;
 - switches the speech and rewrite models (downloading them if needed);
 - switches the rewrite style (neutral, casual, formal, concise, or technical), from the next rewrite on;
