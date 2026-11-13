@@ -7,7 +7,7 @@ description = "Dictate and rewrite text in any app, with local Whisper transcrip
 license = "MIT"
 
 [dependencies]
-global-hotkey = "0.9"
+global-hotkey = "0.10"
 fs4 = "1.1"
 sha2 = "0.11"
 # Model downloads only. Native TLS uses the OS certificate store.
